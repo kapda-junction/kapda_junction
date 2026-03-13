@@ -1,0 +1,17 @@
+{
+  "name": "kapda-junction",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Kapda Junction - Men's Wear E-commerce",
+  "scripts": {
+    "install:all": "npm install && cd backend_kapda_junction && npm install && cd ../web_admin_kapda_junction && npm install && cd ../web_kapda_junction && npm install",
+    "dev": "concurrently -n backend,admin,customer -c blue,magenta,green \"cd backend_kapda_junction && npm run dev\" \"cd web_admin_kapda_junction && npm start\" \"cd web_kapda_junction && npm start\"",
+    "dev:backend": "cd backend_kapda_junction && npm run dev",
+    "dev:admin": "cd web_admin_kapda_junction && npm start",
+    "dev:customer": "cd web_kapda_junction && npm start",
+    "build": "cd backend_kapda_junction && npm run build 2>/dev/null || true && cd ../web_admin_kapda_junction && npm run build && cd ../web_kapda_junction && npm run build"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
