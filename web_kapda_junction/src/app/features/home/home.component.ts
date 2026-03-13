@@ -18,107 +18,124 @@ interface LandingSection {
   standalone: true,
   imports: [CommonModule, RouterLink, WhatsAppButtonComponent, ProductImageSliderComponent],
   template: `
-    <div class="hero-wrapper">
-    <section class="hero-carousel">
-      @if (banners.length) {
-        <div class="carousel-wrap">
-          @for (b of banners; track b._id; let i = $index) {
-            <div class="carousel-slide" [class.active]="carouselIndex === i">
-              <div class="slide-bg" [style.backgroundImage]="'url(' + b.image + ')'"></div>
-              <div class="slide-overlay"></div>
-              <div class="product-patches">
-                @for (p of b.products; track p._id) {
-                  <a [routerLink]="['/products', p._id]" class="patch">
-                    <img [src]="p.images?.[0] || ''" [alt]="p.name" />
-                    <span class="patch-name">{{ p.name }}</span>
-                    <span class="patch-price">₹{{ p.price }}</span>
-                  </a>
+    <div class="home-page">
+      <section class="hero-carousel">
+        @if (banners.length) {
+          <div class="carousel-wrap">
+            @for (b of banners; track b._id; let i = $index) {
+              <div class="carousel-slide" [class.active]="carouselIndex === i">
+                <div class="slide-bg" [style.backgroundImage]="'url(' + b.image + ')'"></div>
+                <div class="slide-overlay"></div>
+                <div class="product-patches">
+                  @for (p of b.products; track p._id) {
+                    <a [routerLink]="['/products', p._id]" class="patch">
+                      <img [src]="p.images?.[0] || ''" [alt]="p.name" />
+                      <span class="patch-name">{{ p.name }}</span>
+                      <span class="patch-price">₹{{ p.price }}</span>
+                    </a>
+                  }
+                </div>
+                @if (banners.length > 1) {
+                  <div class="carousel-dots">
+                    @for (b2 of banners; track b2._id; let j = $index) {
+                      <button type="button" class="dot" [class.active]="carouselIndex === j" (click)="goToSlide(j)" [attr.aria-label]="'Slide ' + (j+1)"></button>
+                    }
+                  </div>
                 }
               </div>
-              @if (banners.length > 1) {
-                <div class="carousel-dots">
-                  @for (b2 of banners; track b2._id; let j = $index) {
-                    <button type="button" class="dot" [class.active]="carouselIndex === j" (click)="goToSlide(j)" [attr.aria-label]="'Slide ' + (j+1)"></button>
-                  }
+            }
+          </div>
+        } @else {
+          <div class="hero-fallback">
+            <span class="hero-tag">New Collection</span>
+            <h1>Men's Wear,<br><em>Refined.</em></h1>
+            <p>Premium quality clothing for the modern gentleman.</p>
+          </div>
+        }
+      </section>
+
+      @if (loading) {
+        <section class="sections loading-section">
+          <div class="container">
+            <div class="skeleton-header"></div>
+            <div class="skeleton-grid">
+              @for (i of [1,2,3,4]; track i) {
+                <div class="skeleton-card">
+                  <div class="skeleton-img"></div>
+                  <div class="skeleton-line short"></div>
+                  <div class="skeleton-line"></div>
                 </div>
               }
             </div>
-          }
-        </div>
-      } @else {
-        <div class="hero-fallback">
-          <h1>Men's Wear,<br>Refined.</h1>
-          <p>Premium quality clothing for the modern gentleman.</p>
-        </div>
+          </div>
+        </section>
       }
-    </section>
-    <section class="sections" *ngIf="loading">
-      <div class="container"><div class="loading">Loading...</div></div>
-    </section>
-    <section class="sections" *ngIf="!loading && sections?.length">
-      <div class="container" *ngFor="let sec of sections">
-        <div class="section-header">
-          <h2>{{ sec.category.name }}</h2>
-          <a [routerLink]="['/category', sec.category._id]" class="see-more">See More</a>
-        </div>
-        <div class="product-grid">
-          <div class="card" *ngFor="let p of sec.products" [class.sold-out]="isFullySoldOut(p)">
-            <a [routerLink]="['/products', p._id]" class="card-link">
-              <div class="img-wrap">
-                <app-product-image-slider [images]="p.images" [alt]="p.name" />
-                <span class="badge-soldout" *ngIf="isFullySoldOut(p)">Sold Out</span>
-                <div class="card-actions">
-                  <app-whatsapp-button [product]="p" [inline]="true" class="wa-inline"></app-whatsapp-button>
-                </div>
+
+      @if (!loading && sections?.length) {
+        <section class="sections" *ngFor="let sec of sections; let i = index">
+          <div class="container section-block">
+            <div class="section-header">
+              <h2 class="section-title">{{ sec.category.name }}</h2>
+              <a [routerLink]="['/category', sec.category._id]" class="see-more">
+                See all <span aria-hidden="true">&rarr;</span>
+              </a>
+            </div>
+            <div class="product-grid">
+              <article class="card" *ngFor="let p of sec.products" [class.sold-out]="isFullySoldOut(p)">
+                <a [routerLink]="['/products', p._id]" class="card-link">
+                  <div class="img-wrap">
+                    <app-product-image-slider [images]="p.images" [alt]="p.name" />
+                    <span class="badge-soldout" *ngIf="isFullySoldOut(p)">Sold Out</span>
+                    <div class="card-overlay">
+                      <app-whatsapp-button [product]="p" [inline]="true" class="wa-inline"></app-whatsapp-button>
+                    </div>
+                  </div>
+                  <div class="card-body">
+                    <h3>{{ p.name }}</h3>
+                    <p class="price">₹{{ p.price }}</p>
+                    @if (hasVariants(p)) {
+                      <span class="btn-select">View Product</span>
+                    } @else {
+                      <button class="btn-add" (click)="addToCart(p); $event.preventDefault(); $event.stopPropagation()" [disabled]="isFullySoldOut(p)">Add to Cart</button>
+                    }
+                  </div>
+                </a>
+              </article>
+            </div>
+            @if (sec.total > sec.products.length) {
+              <div class="section-footer">
+                <a [routerLink]="['/category', sec.category._id]" class="btn-see-more">View all {{ sec.total }} products</a>
               </div>
-              <h3>{{ p.name }}</h3>
-            </a>
-            <p class="price">₹{{ p.price }}</p>
-            @if (hasVariants(p)) {
-              <a [routerLink]="['/products', p._id]" class="btn-select">View Product</a>
-            } @else {
-              <button (click)="addToCart(p); $event.preventDefault()" [disabled]="isFullySoldOut(p)">Add to Cart</button>
             }
           </div>
-        </div>
-        <div class="section-footer" *ngIf="sec.total > sec.products.length">
-          <a [routerLink]="['/category', sec.category._id]" class="btn-see-more">See More ({{ sec.total - sec.products.length }} more)</a>
-        </div>
-      </div>
-    </section>
+        </section>
+      }
     </div>
   `,
   styles: [`
     :host { display: block; width: 100%; overflow-x: hidden; }
-    .hero-wrapper { width: 100%; overflow-x: hidden; max-width: 100%; padding-top: 0.5rem; }
+    .home-page { width: 100%; overflow-x: hidden; padding-top: 0.5rem; }
     .hero-carousel {
       position: relative;
       display: block;
       width: 90%;
       max-width: 90vw;
-      max-height: 220px;
       margin: 0 auto;
       overflow: hidden;
       background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-light) 100%);
       color: #fff;
       aspect-ratio: 16 / 9;
-      min-height: 160px;
+      min-height: 150px;
+      max-height: 200px;
       border-radius: var(--radius);
       box-sizing: border-box;
     }
+    @media (min-width: 375px) { .hero-carousel { min-height: 165px; max-height: 220px; } }
+    @media (min-width: 480px) { .hero-carousel { min-height: 180px; max-height: 250px; } }
+    @media (min-width: 768px) { .hero-carousel { min-height: 200px; max-height: 280px; } }
+    @media (min-width: 1024px) { .hero-carousel { min-height: 220px; max-height: 300px; } }
     .carousel-wrap, .slide-bg, .slide-overlay { border-radius: inherit; }
-    .carousel-wrap { overflow: hidden; }
-    @media (min-width: 640px) { .hero-carousel { margin-top: 0; } }
-    @media (min-width: 375px) { .hero-carousel { min-height: 180px; } }
-    @media (min-width: 480px) { .hero-carousel { min-height: 200px; max-height: 260px; } }
-    @media (min-width: 768px) { .hero-carousel { min-height: 220px; max-height: 300px; } }
-    @media (min-width: 1024px) { .hero-carousel { min-height: 260px; max-height: 340px; } }
-    .carousel-wrap {
-      position: absolute;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-    }
+    .carousel-wrap { overflow: hidden; position: absolute; inset: 0; width: 100%; height: 100%; }
     .carousel-slide {
       position: absolute;
       inset: 0;
@@ -295,12 +312,36 @@ interface LandingSection {
     }
     @media (min-width: 480px) { .hero-fallback { min-height: 220px; padding: 2.5rem 1.5rem; } }
     @media (min-width: 768px) { .hero-fallback { min-height: 320px; padding: 3rem 2rem; } }
-    .hero-fallback h1 { font-size: 1.5rem; font-weight: 700; line-height: 1.2; margin-bottom: 0.5rem; }
+    .hero-fallback h1 { font-family: var(--font-display); font-size: 1.5rem; font-weight: 700; line-height: 1.25; margin-bottom: 0.5rem; letter-spacing: -0.02em; }
+    .hero-fallback h1 em { font-style: italic; font-weight: 600; color: var(--color-accent); }
     @media (min-width: 480px) { .hero-fallback h1 { font-size: 1.75rem; } }
-    @media (min-width: 768px) { .hero-fallback h1 { font-size: 2rem; } }
+    @media (min-width: 768px) { .hero-fallback h1 { font-size: 2.25rem; letter-spacing: -0.03em; } }
     .hero-fallback p { font-size: 0.9rem; opacity: 0.9; }
     @media (min-width: 768px) { .hero-fallback p { font-size: 1rem; } }
-    .sections { padding: 2rem 0; }
+    .sections { padding: 2.5rem 0; }
+    .section-block { margin-bottom: 2rem; }
+    .section-block:last-child { margin-bottom: 0; }
+    .section-title {
+      font-size: 1.5rem; font-weight: 700; color: var(--text-primary);
+      letter-spacing: -0.02em; position: relative;
+    }
+    @media (min-width: 768px) { .section-title { font-size: 1.75rem; } }
+    .btn-see-more {
+      display: inline-block; padding: 0.6rem 1.25rem;
+      border: 2px solid var(--color-accent); border-radius: var(--radius-sm);
+      font-weight: 600; color: var(--color-accent); font-size: 0.9rem;
+      transition: background 0.2s, color 0.2s;
+    }
+    .btn-see-more:hover { background: var(--color-accent); color: #fff !important; }
+    .loading-section { padding: 2rem 0; }
+    .skeleton-header { width: 40%; height: 28px; background: linear-gradient(90deg, #e2e8f0 25%, #f1f5f9 50%, #e2e8f0 75%); background-size: 200% 100%; animation: skeleton 1.2s ease-in-out infinite; border-radius: 4px; margin-bottom: 1.5rem; }
+    .skeleton-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; }
+    @media (min-width: 640px) { .skeleton-grid { grid-template-columns: repeat(4, 1fr); } }
+    .skeleton-card { background: var(--bg-card); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow-sm); }
+    .skeleton-img { aspect-ratio: 1; background: linear-gradient(90deg, #e2e8f0 25%, #f1f5f9 50%, #e2e8f0 75%); background-size: 200% 100%; animation: skeleton 1.2s ease-in-out infinite; }
+    .skeleton-line { height: 14px; margin: 0.75rem 1rem 0; background: linear-gradient(90deg, #e2e8f0 25%, #f1f5f9 50%, #e2e8f0 75%); background-size: 200% 100%; animation: skeleton 1.2s ease-in-out infinite; border-radius: 4px; }
+    .skeleton-line.short { width: 60%; margin-top: 0.5rem; }
+    @keyframes skeleton { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
     .loading { padding: 3rem; text-align: center; color: var(--text-secondary); }
     .section-header {
       display: flex;
@@ -308,62 +349,79 @@ interface LandingSection {
       align-items: center;
       margin-bottom: 1.25rem;
     }
-    .section-header h2 { font-size: 1.5rem; font-weight: 700; color: var(--text-primary); }
     .see-more, .btn-see-more {
       font-weight: 600;
       color: var(--color-accent);
       font-size: 0.95rem;
     }
-    .see-more:hover, .btn-see-more:hover { color: var(--color-accent-hover); }
+    .see-more:hover { color: var(--color-accent-hover); }
     .product-grid {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 1rem;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1.5rem 1rem;
+      justify-content: flex-start;
     }
+    .product-grid .card { flex: 1 1 calc(50% - 0.5rem); min-width: 0; max-width: calc(50% - 0.5rem); }
     @media (min-width: 640px) {
-      .product-grid { grid-template-columns: repeat(4, 1fr); gap: 1.25rem; }
+      .product-grid { gap: 2rem 1.5rem; }
+      .product-grid .card { flex: 1 1 calc(33.333% - 1rem); max-width: calc(33.333% - 1rem); }
+    }
+    @media (min-width: 1024px) {
+      .product-grid .card { flex: 1 1 calc(25% - 1.125rem); max-width: calc(25% - 1.125rem); }
     }
     .section-footer { text-align: center; margin-top: 1.5rem; }
     .card {
-      background: var(--bg-card);
-      border-radius: var(--radius);
-      overflow: hidden;
-      box-shadow: var(--shadow-sm);
-      transition: box-shadow var(--transition);
+      background: transparent;
+      border-radius: 0;
+      overflow: visible;
+      transition: transform var(--transition);
     }
-    .card:hover { box-shadow: var(--shadow); }
+    .card:hover { transform: translateY(-2px); }
     .card.sold-out { opacity: 0.85; }
     .card-link { display: block; }
     .img-wrap {
       position: relative;
       aspect-ratio: 1;
       overflow: hidden;
+      border-radius: var(--radius-lg);
+      background: var(--bg-body);
+      transition: box-shadow var(--transition);
     }
-    .img-wrap:hover .card-actions { opacity: 1; }
-    .card-actions {
+    .card:hover .img-wrap { box-shadow: 0 6px 20px rgba(0,0,0,0.08); }
+    .img-wrap:hover .card-overlay { opacity: 1; }
+    .img-wrap:hover img, .img-wrap:hover ::ng-deep img { transform: scale(1.06); }
+    .img-wrap img, .img-wrap ::ng-deep img { transition: transform 0.4s ease; }
+    .card-overlay {
       position: absolute;
-      bottom: 0.5rem;
-      right: 0.5rem;
+      inset: 0;
+      background: linear-gradient(to top, rgba(0,0,0,0.5) 0%, transparent 50%);
+      display: flex;
+      align-items: flex-end;
+      justify-content: flex-end;
+      padding: 0.75rem;
       opacity: 0;
       transition: opacity var(--transition);
     }
-    .card img { width: 100%; height: 100%; object-fit: cover; }
+    .card img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.4s ease; }
+    .card ::ng-deep img { transition: transform 0.4s ease; }
     .badge-soldout {
       position: absolute; inset: 0;
       display: flex; align-items: center; justify-content: center;
       background: var(--bg-overlay);
       color: #fff; font-weight: 600; font-size: 0.85rem;
     }
-    .card h3 { padding: 0.6rem 0.75rem 0; font-size: 0.95rem; }
-    .price { padding: 0 0.75rem; font-weight: 700; color: var(--color-primary); font-size: 0.95rem; }
-    button {
-      width: 100%; margin: 0.5rem 0.75rem 0.75rem; padding: 0.5rem;
+    .card-body { padding: 0.75rem 1rem; }
+    .card h3 { padding: 0; font-size: 0.95rem; font-weight: 600; line-height: 1.3; color: var(--text-primary); }
+    .card .price { padding: 0.25rem 0 0.5rem; font-weight: 700; color: var(--color-primary); font-size: 0.95rem; }
+    .btn-add, button {
+      width: 100%; margin: 0; padding: 0.5rem 0.75rem;
       background: var(--color-primary);
       color: #fff; border-radius: var(--radius-sm);
       font-weight: 500; cursor: pointer; font-size: 0.85rem;
+      transition: background var(--transition), opacity var(--transition);
     }
-    button:hover:not(:disabled) { opacity: 0.9; }
-    button:disabled { opacity: 0.6; cursor: not-allowed; }
+    .btn-add:hover:not(:disabled), button:hover:not(:disabled) { opacity: 0.92; background: var(--color-primary-light); }
+    .btn-add:disabled, button:disabled { opacity: 0.6; cursor: not-allowed; }
     .btn-select {
       display: block; width: 100%; margin: 0.5rem 0.75rem 0.75rem; padding: 0.5rem;
       background: var(--color-primary); color: #fff; text-align: center;
@@ -410,6 +468,20 @@ export class HomeComponent implements OnInit, OnDestroy {
 
   goToSlide(i: number) {
     this.carouselIndex = i;
+    this.resetCarouselTimer();
+  }
+
+  prevSlide() {
+    this.carouselIndex = this.carouselIndex === 0 ? this.banners.length - 1 : this.carouselIndex - 1;
+    this.resetCarouselTimer();
+  }
+
+  nextSlide() {
+    this.carouselIndex = (this.carouselIndex + 1) % this.banners.length;
+    this.resetCarouselTimer();
+  }
+
+  private resetCarouselTimer() {
     if (this.banners.length > 1) {
       if (this.carouselTimer) clearInterval(this.carouselTimer);
       this.carouselTimer = setInterval(() => {
