@@ -1,5 +1,5 @@
 export const environment = {
   production: true,
   apiUrl: 'https://kapda-junction-tau.vercel.app/api',
-  shareBaseUrl: '' // update after Netlify deploy: https://YOUR-SITE.netlify.app
+  shareBaseUrl: 'https://kapda-junction-tau.vercel.app' // Backend URL – share route serves OG meta + redirects to product
 };
