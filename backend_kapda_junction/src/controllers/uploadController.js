@@ -1,7 +1,14 @@
 const sharp = require('sharp');
-const heicConvert = require('heic-convert');
 const cloudinary = require('../config/cloudinary');
 const { Readable } = require('stream');
+
+// heic-convert has native deps - optional on Vercel serverless
+let heicConvert = null;
+try {
+  heicConvert = require('heic-convert');
+} catch (e) {
+  console.warn('heic-convert not available (HEIC uploads disabled on this platform)');
+}
 
 const isHeic = (file) => {
   const ext = (file.originalname || '').toLowerCase().split('.').pop();
@@ -48,6 +55,9 @@ exports.uploadImage = async (req, res, next) => {
     }
     let buffer = req.file.buffer;
     if (isHeic(req.file)) {
+      if (!heicConvert) {
+        return res.status(400).json({ message: 'HEIC not supported. Use JPEG, PNG, or WebP.' });
+      }
       buffer = await heicConvert({ buffer: req.file.buffer, format: 'JPEG' });
     }
     const compressed = await sharp(buffer)
@@ -68,6 +78,9 @@ exports.uploadBanner = async (req, res, next) => {
     }
     let buffer = req.file.buffer;
     if (isHeic(req.file)) {
+      if (!heicConvert) {
+        return res.status(400).json({ message: 'HEIC not supported. Use JPEG, PNG, or WebP.' });
+      }
       buffer = await heicConvert({ buffer: req.file.buffer, format: 'JPEG' });
     }
     const compressed = await sharp(buffer)
@@ -91,6 +104,9 @@ exports.uploadMultiple = async (req, res, next) => {
     for (const f of files) {
       let buffer = f.buffer;
       if (isHeic(f)) {
+        if (!heicConvert) {
+          return res.status(400).json({ message: 'HEIC not supported on this server. Use JPEG, PNG, or WebP.' });
+        }
         buffer = await heicConvert({ buffer: f.buffer, format: 'JPEG' });
       }
       const compressed = await sharp(buffer)

@@ -41,7 +41,7 @@ git init
 git add .
 git commit -m "Initial deploy"
 git branch -M main
-git remote add origin https://github.com/YOUR_USERNAME/kapda_junction.git
+git remote add origin https://github.com/kapda-junction/kapda_junction.git
 git push -u origin main
 ```
 
@@ -192,3 +192,34 @@ npm run seed
 | **API 404** | Frontend mein `apiUrl` sahi hai? `/api` end mein hai? |
 | **Build fail** | Netlify pe Base directory + Publish directory check karo |
 | **DB connection failed** | MONGODB_URI sahi hai? Atlas mein IP 0.0.0.0/0 allow hai? |
+| **Vercel 500 / FUNCTION_INVOCATION_FAILED** | Neeche dekho ↓ |
+
+---
+
+### Vercel 500 crash fix
+
+Agar backend pe **500: INTERNAL_SERVER_ERROR** ya **FUNCTION_INVOCATION_FAILED** aa raha ho:
+
+1. **Vercel Logs check karo:**  
+   Project → Deployments → Latest → **Functions** → Logs (exact error dekhne ke liye)
+
+2. **Env vars:** `MONGODB_URI`, `JWT_SECRET`, `CLOUDINARY_*` sab set hai?
+
+3. **Agar ab bhi fail ho:** Backend **Render** pe shift karo (serverless limitations ke liye better hai)
+
+---
+
+### Backend Render pe (Vercel fail hone par)
+
+1. **https://render.com** → Sign up (GitHub)
+2. **New** → **Web Service**
+3. Repo select karo
+4. Settings:
+   - **Root Directory:** `backend_kapda_junction`
+   - **Build Command:** `npm install`
+   - **Start Command:** `npm start`
+   - **Instance:** Free
+5. **Environment Variables** same daalo: MONGODB_URI, JWT_SECRET, CLOUDINARY_*, CORS_ORIGIN
+6. Deploy → URL milega: `https://kapda-junction-api.onrender.com`
+7. Frontend `environment.prod.ts` mein API URL update karo:  
+   `https://kapda-junction-api.onrender.com/api`
