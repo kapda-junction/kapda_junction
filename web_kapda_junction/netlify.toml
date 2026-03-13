@@ -2,8 +2,8 @@
   command = "npm run build"
   publish = "dist/web-kapda-junction/browser"
 
+# SPA: serve index.html for routes; existing files (.js, .css) served as-is
 [[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
-  force = true
