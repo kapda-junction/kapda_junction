@@ -1,10 +1,7 @@
 const multer = require('multer');
 const path = require('path');
-const fs = require('fs');
 
-const UPLOAD_DIR = path.join(process.cwd(), 'tmp_uploads');
-if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-
+// Use memoryStorage - no disk needed (Vercel serverless has read-only filesystem)
 const storage = multer.memoryStorage();
 
 const fileFilter = (req, file, cb) => {
