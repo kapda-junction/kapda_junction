@@ -1,4 +1,4 @@
 export const environment = {
   production: true,
-  apiUrl: 'https://kapda-junction-tau.vercel.app/api'
+  apiUrl: 'https://kapda-junction-api.onrender.com/api'
 };
