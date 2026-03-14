@@ -36,6 +36,7 @@ productSchema.pre('save', function (next) {
 });
 
 productSchema.index({ category: 1, isActive: 1 });
+productSchema.index({ category: 1, isActive: 1, createdAt: -1 });
 productSchema.index({ subcategory: 1, isActive: 1 });
 productSchema.index({ name: 'text', description: 'text' });
 

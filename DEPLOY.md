@@ -184,6 +184,20 @@ npm run seed
 
 ---
 
+### API 5+ second pe load ho rahi hai?
+
+Vercel serverless **cold start** ki wajah se pehla request slow hota hai (3–6 sec). Backend 1–2 min idle rehne ke baad so jata hai, phir next request pe dubara boot hota hai.
+
+**Tez karne ke tarike:**
+
+1. **Keep-alive cron (recommended):** [cron-job.org](https://cron-job.org) (free) par job banao jo har 5 min pe `GET https://YOUR-VERCEL-URL.vercel.app/api/health` hit kare. Backend warm rahega, cold start kam hoga.
+
+2. **Backend Render pe shift karo:** Always-on server = cold start nahi. Neeche "Backend Render pe" section dekho.
+
+3. **MongoDB region:** Atlas cluster ko Vercel ke region ke kareeb rakhna (e.g. dono US East) – connection faster hoga.
+
+---
+
 ## Troubleshooting
 
 | Problem | Solution |
@@ -193,6 +207,33 @@ npm run seed
 | **Build fail** | Netlify pe Base directory + Publish directory check karo |
 | **DB connection failed** | MONGODB_URI sahi hai? Atlas mein IP 0.0.0.0/0 allow hai? |
 | **Vercel 500 / FUNCTION_INVOCATION_FAILED** | Neeche dekho ↓ |
+| **API 5+ sec load (landing / products)** | Neeche "API slow" dekho ↓ |
+
+---
+
+### API 5 second slow – Cold Start (Vercel)
+
+Agar landing page ya products API pe **5–6 second** lag raha ho:
+
+**Reason:** Vercel serverless = **cold start**. Koi request na aaye 1–2 min to function so jata hai. First request pe:
+- Node.js boot
+- MongoDB connect (2–3 sec)
+- Query run
+
+**Solution (choose one):**
+
+1. **Keep warm with cron (recommended):**  
+   - [cron-job.org](https://cron-job.org) (free) pe signup
+   - New cron: `GET https://YOUR-API.vercel.app/api/health` every **5 minutes**
+   - Result: Function sleep nahi karega, first load fast rahega
+
+2. **Backend Render pe move karo:**  
+   - Render **always-on** hai (free tier bhi)
+   - Cold start nahi, API ~500ms–1s mein aayegi  
+   - Steps upar "Backend Render pe" section mein hai
+
+3. **MongoDB region:**  
+   - Atlas cluster ka region Vercel region ke kareeb rakho (e.g. Mumbai → Singapore)
 
 ---
 
@@ -206,6 +247,21 @@ Agar backend pe **500: INTERNAL_SERVER_ERROR** ya **FUNCTION_INVOCATION_FAILED**
 2. **Env vars:** `MONGODB_URI`, `JWT_SECRET`, `CLOUDINARY_*` sab set hai?
 
 3. **Agar ab bhi fail ho:** Backend **Render** pe shift karo (serverless limitations ke liye better hai)
+
+---
+
+### API 5+ second load (landing / products slow)
+
+**Cause:** Vercel serverless = **cold start**. Jab koi request nahi aati (30–60 sec), function so jata hai. Next request pe:
+- Node.js runtime boot
+- MongoDB connection (2–4 sec)
+- Query run
+
+**Fix 1 – Keep warm (free):** Cron se har 5 min `/api/health` hit karo:
+- **cron-job.org** (free) → Create → URL: `https://YOUR-VERCEL-URL.vercel.app/api/health` → Interval: 5 min
+- Ya **UptimeRobot** use karo (free monitoring + ping)
+
+**Fix 2 – Always-on backend:** Backend ko **Render** pe shift karo (free tier bhi always-on). Cold start nahi hoga, landing API ~200–500ms mein load hogi.
 
 ---
 

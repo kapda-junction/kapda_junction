@@ -37,30 +37,42 @@ exports.getLanding = async (req, res, next) => {
   try {
     const isAdmin = req.user?.role === 'admin';
     const limitPerCategory = parseInt(req.query.limit) || 8;
-    const parentCats = await Category.find(isAdmin ? {} : { isActive: true, parent: null })
+    const productFilter = isAdmin ? {} : { isActive: true };
+
+    const parentCats = await Category.find(isAdmin ? { parent: null } : { isActive: true, parent: null })
       .sort('sortOrder name')
       .lean();
-    const sections = [];
-    for (const cat of parentCats) {
-      const subIds = (await Category.find({ parent: cat._id }).select('_id').lean()).map((c) => c._id);
-      const categoryIds = [cat._id, ...subIds];
-      const products = await Product.find({
-        category: { $in: categoryIds },
-        ...(isAdmin ? {} : { isActive: true })
-      })
-        .populate('category', 'name slug')
-        .populate('subcategory', 'name slug')
-        .limit(limitPerCategory)
-        .sort('-createdAt')
-        .lean();
-      const total = await Product.countDocuments({
-        category: { $in: categoryIds },
-        ...(isAdmin ? {} : { isActive: true })
-      });
-      if (products.length > 0 || total > 0) {
-        sections.push({ category: cat, products, total });
-      }
+
+    if (parentCats.length === 0) return res.json({ sections: [] });
+
+    const parentIds = parentCats.map((c) => c._id);
+    const subCats = await Category.find({ parent: { $in: parentIds } }).select('parent _id').lean();
+    const subIdsByParent = {};
+    for (const s of subCats) {
+      if (!subIdsByParent[s.parent]) subIdsByParent[s.parent] = [];
+      subIdsByParent[s.parent].push(s._id);
     }
+
+    const categoryIdsList = parentCats.map((cat) => [cat._id, ...(subIdsByParent[cat._id] || [])]);
+
+    const sectionPromises = parentCats.map(async (cat, i) => {
+      const categoryIds = categoryIdsList[i];
+      const filter = { category: { $in: categoryIds }, ...productFilter };
+      const [products, total] = await Promise.all([
+        Product.find(filter)
+          .select('name price images category subcategory soldOut variants')
+          .populate('category', 'name slug')
+          .populate('subcategory', 'name slug')
+          .limit(limitPerCategory)
+          .sort('-createdAt')
+          .lean(),
+        Product.countDocuments(filter)
+      ]);
+      return { category: cat, products, total };
+    });
+
+    const results = await Promise.all(sectionPromises);
+    const sections = results.filter((s) => s.products.length > 0 || s.total > 0);
     res.json({ sections });
   } catch (err) {
     next(err);
