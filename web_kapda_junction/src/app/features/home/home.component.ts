@@ -71,7 +71,7 @@ interface LandingSection {
         </section>
       }
 
-      @if (!loading && sections?.length) {
+      @if (!loading && sections.length) {
         <section class="sections" *ngFor="let sec of sections; let i = index">
           <div class="container section-block">
             <div class="section-header">

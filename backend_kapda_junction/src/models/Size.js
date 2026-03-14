@@ -5,5 +5,4 @@ const sizeSchema = new mongoose.Schema({
   sortOrder: { type: Number, default: 0 },
 }, { timestamps: true });
 
-sizeSchema.index({ name: 1 });
 module.exports = mongoose.model('Size', sizeSchema);

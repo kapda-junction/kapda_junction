@@ -5,5 +5,4 @@ const colorSchema = new mongoose.Schema({
   sortOrder: { type: Number, default: 0 },
 }, { timestamps: true });
 
-colorSchema.index({ name: 1 });
 module.exports = mongoose.model('Color', colorSchema);

@@ -35,7 +35,7 @@ interface BannerItem {
           <div class="banner-card">
             <div class="banner-preview" [style.backgroundImage]="'url(' + b.image + ')'"></div>
             <div class="banner-meta">
-              <span class="product-count">{{ b.products?.length || 0 }} products</span>
+              <span class="product-count">{{ b.products.length || 0 }} products</span>
               <label class="toggle">
                 <input type="checkbox" [checked]="b.isActive" (change)="toggleActive(b)" />
                 Active
