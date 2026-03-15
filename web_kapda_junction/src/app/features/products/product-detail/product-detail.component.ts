@@ -6,6 +6,7 @@ import { CartActions } from '../../../core/features/cart/store/cart.actions';
 import { WhatsAppButtonComponent } from '../../../shared/whatsapp-button/whatsapp-button.component';
 import { ApiService } from '../../../core/services/api.service';
 import { SettingsService } from '../../../core/services/settings.service';
+import { SnackbarService } from '../../../core/services/snackbar.service';
 import { map, switchMap } from 'rxjs/operators';
 import { of } from 'rxjs';
 
@@ -260,6 +261,7 @@ export class ProductDetailComponent implements OnInit {
   lightboxOpen = false;
   lightboxIndex = 0;
   private settings = inject(SettingsService);
+  private snackbar = inject(SnackbarService);
 
   get lightboxImage(): string {
     const imgs = this.product?.images ?? [];
@@ -430,6 +432,7 @@ export class ProductDetailComponent implements OnInit {
       quantity: 1,
       variant: this.product.variants?.length ? { color: variant?.color, size: variant?.size } : undefined
     }));
+    this.snackbar.showSuccess('Added to cart');
   }
 
   copyShareLink() {

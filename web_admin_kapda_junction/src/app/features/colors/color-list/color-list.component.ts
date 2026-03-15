@@ -2,6 +2,7 @@ import { Component, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ColorService } from '../../../core/services/color.service';
+import { SnackbarService } from '../../../core/services/snackbar.service';
 
 @Component({
   selector: 'app-color-list',
@@ -68,6 +69,7 @@ import { ColorService } from '../../../core/services/color.service';
 })
 export class ColorListComponent implements OnInit {
   private colorService = inject(ColorService);
+  private snackbar = inject(SnackbarService);
   items: { _id: string; name: string }[] = [];
   loading = false;
   showForm = false;
@@ -103,24 +105,49 @@ export class ColorListComponent implements OnInit {
   save() {
     if (!this.form.name?.trim()) return;
     const payload = { name: this.form.name.trim() };
+    this.snackbar.setLoading(true);
     if (this.editing?._id) {
       this.colorService.update(this.editing._id, payload).subscribe({
-        next: () => { this.closeForm(); this.load(); },
-        error: (e) => alert(e.error?.message || 'Update failed')
+        next: () => {
+          this.snackbar.setLoading(false);
+          this.snackbar.showSuccess('Color updated');
+          this.closeForm();
+          this.load();
+        },
+        error: (e) => {
+          this.snackbar.setLoading(false);
+          this.snackbar.showError(e.error?.message || 'Update failed');
+        }
       });
     } else {
       this.colorService.create(payload).subscribe({
-        next: () => { this.closeForm(); this.load(); },
-        error: (e) => alert(e.error?.message || 'Create failed')
+        next: () => {
+          this.snackbar.setLoading(false);
+          this.snackbar.showSuccess('Color added');
+          this.closeForm();
+          this.load();
+        },
+        error: (e) => {
+          this.snackbar.setLoading(false);
+          this.snackbar.showError(e.error?.message || 'Create failed');
+        }
       });
     }
   }
 
   deleteItem(c: { _id: string; name: string }) {
     if (!confirm(`Delete color "${c.name}"?`)) return;
+    this.snackbar.setLoading(true);
     this.colorService.delete(c._id).subscribe({
-      next: () => this.load(),
-      error: (e) => alert(e.error?.message || 'Delete failed')
+      next: () => {
+        this.snackbar.setLoading(false);
+        this.snackbar.showSuccess('Color deleted');
+        this.load();
+      },
+      error: (e) => {
+        this.snackbar.setLoading(false);
+        this.snackbar.showError(e.error?.message || 'Delete failed');
+      }
     });
   }
 }

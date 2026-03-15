@@ -5,6 +5,7 @@ import { RouterLink } from '@angular/router';
 import { BannerService, BannerPayload } from '../../core/services/banner.service';
 import { ProductService } from '../../core/services/product.service';
 import { UploadService } from '../../core/services/upload.service';
+import { SnackbarService } from '../../core/services/snackbar.service';
 
 interface BannerItem {
   _id?: string;
@@ -146,6 +147,7 @@ interface BannerItem {
 export class BannerListComponent implements OnInit {
   private bannerService = inject(BannerService);
   private productService = inject(ProductService);
+  private snackbar = inject(SnackbarService);
   private uploadService = inject(UploadService);
   private cdr = inject(ChangeDetectorRef);
 
@@ -260,7 +262,7 @@ export class BannerListComponent implements OnInit {
 
   save() {
     if (!this.form.image || this.selectedProductIds.length === 0) {
-      alert('Upload banner image and select at least one product.');
+      this.snackbar.showError('Upload banner image and select at least one product.');
       return;
     }
     const payload: BannerPayload = {
@@ -268,15 +270,32 @@ export class BannerListComponent implements OnInit {
       products: this.selectedProductIds,
       isActive: this.form.isActive
     };
+    this.snackbar.setLoading(true);
     if (this.editing?._id) {
       this.bannerService.update(this.editing._id, payload).subscribe({
-        next: () => { this.closeForm(); this.load(); },
-        error: (e: { error?: { message?: string } }) => alert(e.error?.message || 'Update failed')
+        next: () => {
+          this.snackbar.setLoading(false);
+          this.snackbar.showSuccess('Banner updated');
+          this.closeForm();
+          this.load();
+        },
+        error: (e: { error?: { message?: string } }) => {
+          this.snackbar.setLoading(false);
+          this.snackbar.showError(e.error?.message || 'Update failed');
+        }
       });
     } else {
       this.bannerService.create(payload).subscribe({
-        next: () => { this.closeForm(); this.load(); },
-        error: (e: { error?: { message?: string } }) => alert(e.error?.message || 'Create failed')
+        next: () => {
+          this.snackbar.setLoading(false);
+          this.snackbar.showSuccess('Banner added');
+          this.closeForm();
+          this.load();
+        },
+        error: (e: { error?: { message?: string } }) => {
+          this.snackbar.setLoading(false);
+          this.snackbar.showError(e.error?.message || 'Create failed');
+        }
       });
     }
   }
@@ -285,8 +304,8 @@ export class BannerListComponent implements OnInit {
     if (!b._id) return;
     const productIds = (b.products || []).map((p) => p._id).filter((id): id is string => !!id);
     this.bannerService.update(b._id, { image: b.image, products: productIds, isActive: !b.isActive }).subscribe({
-      next: () => this.load(),
-      error: (e) => alert(e.error?.message || 'Update failed')
+      next: () => { this.snackbar.showSuccess('Banner updated'); this.load(); },
+      error: (e) => this.snackbar.showError(e.error?.message || 'Update failed')
     });
   }
 

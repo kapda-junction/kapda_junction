@@ -2,6 +2,7 @@ import { Component, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { SizeService } from '../../../core/services/size.service';
+import { SnackbarService } from '../../../core/services/snackbar.service';
 
 @Component({
   selector: 'app-size-list',
@@ -68,6 +69,7 @@ import { SizeService } from '../../../core/services/size.service';
 })
 export class SizeListComponent implements OnInit {
   private sizeService = inject(SizeService);
+  private snackbar = inject(SnackbarService);
   items: { _id: string; name: string }[] = [];
   loading = false;
   showForm = false;
@@ -103,24 +105,49 @@ export class SizeListComponent implements OnInit {
   save() {
     if (!this.form.name?.trim()) return;
     const payload = { name: this.form.name.trim() };
+    this.snackbar.setLoading(true);
     if (this.editing?._id) {
       this.sizeService.update(this.editing._id, payload).subscribe({
-        next: () => { this.closeForm(); this.load(); },
-        error: (e) => alert(e.error?.message || 'Update failed')
+        next: () => {
+          this.snackbar.setLoading(false);
+          this.snackbar.showSuccess('Size updated');
+          this.closeForm();
+          this.load();
+        },
+        error: (e) => {
+          this.snackbar.setLoading(false);
+          this.snackbar.showError(e.error?.message || 'Update failed');
+        }
       });
     } else {
       this.sizeService.create(payload).subscribe({
-        next: () => { this.closeForm(); this.load(); },
-        error: (e) => alert(e.error?.message || 'Create failed')
+        next: () => {
+          this.snackbar.setLoading(false);
+          this.snackbar.showSuccess('Size added');
+          this.closeForm();
+          this.load();
+        },
+        error: (e) => {
+          this.snackbar.setLoading(false);
+          this.snackbar.showError(e.error?.message || 'Create failed');
+        }
       });
     }
   }
 
   deleteItem(s: { _id: string; name: string }) {
     if (!confirm(`Delete size "${s.name}"?`)) return;
+    this.snackbar.setLoading(true);
     this.sizeService.delete(s._id).subscribe({
-      next: () => this.load(),
-      error: (e) => alert(e.error?.message || 'Delete failed')
+      next: () => {
+        this.snackbar.setLoading(false);
+        this.snackbar.showSuccess('Size deleted');
+        this.load();
+      },
+      error: (e) => {
+        this.snackbar.setLoading(false);
+        this.snackbar.showError(e.error?.message || 'Delete failed');
+      }
     });
   }
 }

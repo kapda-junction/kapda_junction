@@ -7,6 +7,7 @@ import { CategoryService, Category } from '../../../core/services/category.servi
 import { ColorService } from '../../../core/services/color.service';
 import { SizeService } from '../../../core/services/size.service';
 import { UploadService } from '../../../core/services/upload.service';
+import { SnackbarService } from '../../../core/services/snackbar.service';
 
 @Component({
   selector: 'app-product-form',
@@ -206,6 +207,7 @@ export class ProductFormComponent implements OnInit {
   private colorService = inject(ColorService);
   private sizeService = inject(SizeService);
   private uploadService = inject(UploadService);
+  private snackbar = inject(SnackbarService);
   private router = inject(Router);
   private route = inject(ActivatedRoute);
 
@@ -430,15 +432,30 @@ export class ProductFormComponent implements OnInit {
       return;
     }
     const payload = { ...this.form, variants };
+    this.snackbar.setLoading(true);
     if (this.id) {
       this.productService.update(this.id, payload).subscribe({
-        next: () => this.router.navigate(['/products']),
-        error: (e) => alert(e.error?.message || 'Update failed'),
+        next: () => {
+          this.snackbar.setLoading(false);
+          this.snackbar.showSuccess('Product updated');
+          this.router.navigate(['/products']);
+        },
+        error: (e) => {
+          this.snackbar.setLoading(false);
+          this.snackbar.showError(e.error?.message || 'Update failed');
+        },
       });
     } else {
       this.productService.create(payload).subscribe({
-        next: () => this.router.navigate(['/products']),
-        error: (e) => alert(e.error?.message || 'Create failed'),
+        next: () => {
+          this.snackbar.setLoading(false);
+          this.snackbar.showSuccess('Product added');
+          this.router.navigate(['/products']);
+        },
+        error: (e) => {
+          this.snackbar.setLoading(false);
+          this.snackbar.showError(e.error?.message || 'Create failed');
+        },
       });
     }
   }
