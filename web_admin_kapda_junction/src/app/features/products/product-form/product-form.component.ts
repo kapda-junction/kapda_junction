@@ -262,13 +262,25 @@ export class ProductFormComponent implements OnInit {
   toggleColor(name: string) {
     const i = this.selectedColors.indexOf(name);
     if (i >= 0) this.selectedColors.splice(i, 1);
-    else this.selectedColors.push(name);
+    else {
+      this.selectedColors.push(name);
+      for (const sz of this.selectedSizes) {
+        const key = this.stockKey(name, sz);
+        if (this.stockMatrix[key] === undefined) this.stockMatrix[key] = 1;
+      }
+    }
   }
 
   toggleSize(name: string) {
     const i = this.selectedSizes.indexOf(name);
     if (i >= 0) this.selectedSizes.splice(i, 1);
-    else this.selectedSizes.push(name);
+    else {
+      this.selectedSizes.push(name);
+      for (const clr of this.selectedColors) {
+        const key = this.stockKey(clr, name);
+        if (this.stockMatrix[key] === undefined) this.stockMatrix[key] = 1;
+      }
+    }
   }
 
   stockKey(color: string, size: string): string {
@@ -277,7 +289,7 @@ export class ProductFormComponent implements OnInit {
 
   getStock(color: string, size: string): number {
     const v = this.stockMatrix[this.stockKey(color, size)];
-    return typeof v === 'number' ? v : 0;
+    return typeof v === 'number' ? v : 1;
   }
 
   setStock(color: string, size: string, val: string | number) {
