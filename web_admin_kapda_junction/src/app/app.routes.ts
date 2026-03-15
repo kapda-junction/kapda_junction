@@ -18,7 +18,6 @@ export const routes: Routes = [
       { path: 'sizes', loadComponent: () => import('./features/sizes/size-list/size-list.component').then(m => m.SizeListComponent) },
       { path: 'orders', loadComponent: () => import('./features/orders/order-list/order-list.component').then(m => m.OrderListComponent) },
       { path: 'banners', loadComponent: () => import('./features/banners/banner-list.component').then(m => m.BannerListComponent) },
-      { path: 'settings', loadComponent: () => import('./features/settings/settings.component').then(m => m.SettingsComponent) },
       { path: 'settings', loadComponent: () => import('./features/settings/settings.component').then(m => m.SettingsComponent) }
     ]
   },

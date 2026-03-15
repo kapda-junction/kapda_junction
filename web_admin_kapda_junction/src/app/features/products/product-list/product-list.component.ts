@@ -75,13 +75,14 @@ import { inject } from '@angular/core';
     }
   `,
   styles: [`
-    .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
+    .page-header { display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 1.5rem; }
+@media (min-width: 480px) { .page-header { flex-direction: row; justify-content: space-between; align-items: center; } }
     .btn { padding: 0.5rem 1rem; border-radius: 8px; cursor: pointer; border: 1px solid #ddd; background: #fff; text-decoration: none; color: inherit; }
     .btn.primary { background: #1a1a2e; color: #fff; border-color: #1a1a2e; }
     .btn.small { padding: 0.25rem 0.5rem; font-size: 0.85rem; }
     .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-    .table-wrap { background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
-    .table { width: 100%; border-collapse: collapse; }
+    .table-wrap { background: #fff; border-radius: 8px; overflow-x: auto; overflow-y: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.08); -webkit-overflow-scrolling: touch; }
+    .table { width: 100%; min-width: 600px; border-collapse: collapse; }
     .table th, .table td { padding: 0.75rem 1rem; text-align: left; border-bottom: 1px solid #eee; }
     .table th { background: #f8f9fa; font-weight: 600; }
     .thumb { width: 50px; height: 50px; object-fit: cover; border-radius: 6px; }
