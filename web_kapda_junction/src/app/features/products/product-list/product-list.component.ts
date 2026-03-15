@@ -7,11 +7,12 @@ import { selectAllProducts, selectProductsLoading } from '../../../core/features
 import { CartActions } from '../../../core/features/cart/store/cart.actions';
 import { WhatsAppButtonComponent } from '../../../shared/whatsapp-button/whatsapp-button.component';
 import { ProductImageSliderComponent } from '../../../shared/product-image-slider/product-image-slider.component';
+import { ProductPriceComponent } from '../../../shared/product-price/product-price.component';
 
 @Component({
   selector: 'app-product-list',
   standalone: true,
-  imports: [CommonModule, RouterLink, WhatsAppButtonComponent, ProductImageSliderComponent],
+  imports: [CommonModule, RouterLink, WhatsAppButtonComponent, ProductImageSliderComponent, ProductPriceComponent],
   template: `
     <div class="container">
       <h1 class="page-title">Men's Wear</h1>
@@ -31,7 +32,7 @@ import { ProductImageSliderComponent } from '../../../shared/product-image-slide
                 </div>
                 <h3>{{ p.name }}</h3>
               </a>
-              <p class="price">₹{{ p.price }}</p>
+              <p class="price"><app-product-price [price]="p.price" [compareAtPrice]="p.compareAtPrice" /></p>
               @if (hasVariants(p)) {
                 <a [routerLink]="['/products', p._id]" class="btn-select">View Product</a>
               } @else {

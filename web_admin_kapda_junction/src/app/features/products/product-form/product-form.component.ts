@@ -147,39 +147,57 @@ import { UploadService } from '../../../core/services/upload.service';
     </form>
   `,
   styles: [`
-    .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
-    .btn { padding: 0.5rem 1rem; border-radius: 8px; cursor: pointer; border: 1px solid #ddd; background: #fff; text-decoration: none; color: inherit; }
+    :host { display: block; width: 100%; min-width: 0; overflow-x: hidden; }
+    .page-header { display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 1.5rem; align-items: flex-start; }
+    @media (min-width: 480px) { .page-header { flex-direction: row; justify-content: space-between; align-items: center; } }
+    .page-header h1 { font-size: 1.25rem; margin: 0; word-break: break-word; }
+    @media (min-width: 480px) { .page-header h1 { font-size: 1.5rem; } }
+    .btn { padding: 0.5rem 1rem; border-radius: 8px; cursor: pointer; border: 1px solid #ddd; background: #fff; text-decoration: none; color: inherit; font-size: 0.9rem; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; }
     .btn.primary { background: #1a1a2e; color: #fff; border-color: #1a1a2e; }
-    .btn.small { padding: 0.25rem 0.5rem; font-size: 0.85rem; }
+    .btn.small { padding: 0.25rem 0.5rem; font-size: 0.85rem; min-height: 36px; }
     .btn.danger { color: #dc3545; border-color: #dc3545; }
-    .form-card { background: #fff; padding: 2rem; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
-    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-bottom: 2rem; }
-    .section { margin-bottom: 2rem; }
-    .section h3 { margin-bottom: 1rem; font-size: 1.1rem; }
-    .field { margin-bottom: 1rem; }
-    .field label { display: block; font-weight: 500; margin-bottom: 0.35rem; font-size: 0.9rem; }
-    .field input, .field select, .field textarea { width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 6px; }
-    .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    .form-card { background: #fff; padding: 1rem; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box; }
+    @media (min-width: 640px) { .form-card { padding: 1.5rem; } }
+    @media (min-width: 768px) { .form-card { padding: 2rem; } }
+    .grid { display: block; margin-bottom: 1.5rem; }
+    @media (min-width: 768px) { .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-bottom: 2rem; } }
+    .section { margin-bottom: 1.5rem; }
+    @media (min-width: 768px) { .section { margin-bottom: 2rem; } }
+    .section h3 { margin-bottom: 0.75rem; font-size: 1rem; }
+    @media (min-width: 480px) { .section h3 { font-size: 1.1rem; margin-bottom: 1rem; } }
+    .field { margin-bottom: 0.75rem; }
+    @media (min-width: 480px) { .field { margin-bottom: 1rem; } }
+    .field label { display: block; font-weight: 500; margin-bottom: 0.3rem; font-size: 0.875rem; }
+    .field input, .field select, .field textarea { width: 100%; padding: 0.5rem 0.6rem; border: 1px solid #ddd; border-radius: 8px; font-size: 1rem; max-width: 100%; box-sizing: border-box; }
+    .field input[type="file"] { font-size: 0.9rem; min-height: 44px; }
+    .field textarea { min-height: 100px; resize: vertical; }
+    .field-row { display: flex; flex-direction: column; gap: 0.75rem; }
+    @media (min-width: 480px) { .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; } }
     .image-preview { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.5rem; }
-    .thumb { position: relative; width: 80px; height: 80px; }
+    .thumb { position: relative; width: 72px; height: 72px; flex-shrink: 0; }
+    @media (min-width: 480px) { .thumb { width: 80px; height: 80px; } }
     .thumb img { width: 100%; height: 100%; object-fit: cover; border-radius: 8px; }
-    .thumb .remove { position: absolute; top: -4px; right: -4px; width: 24px; height: 24px; border-radius: 50%; background: #dc3545; color: #fff; border: none; cursor: pointer; font-size: 1rem; line-height: 1; }
-    .variant-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; }
-    .hint { font-size: 0.85rem; color: #666; margin-bottom: 1rem; }
-    .variant-table { width: 100%; border-collapse: collapse; }
-    .variant-table th, .variant-table td { padding: 0.5rem; text-align: left; border-bottom: 1px solid #eee; }
+    .thumb .remove { position: absolute; top: -4px; right: -4px; width: 22px; height: 22px; border-radius: 50%; background: #dc3545; color: #fff; border: none; cursor: pointer; font-size: 1rem; line-height: 1; }
+    .hint { font-size: 0.8rem; color: #666; margin-bottom: 0.75rem; line-height: 1.4; }
+    .hint a { color: #1a1a2e; text-decoration: underline; }
+    .variant-table { width: 100%; border-collapse: collapse; min-width: 240px; }
+    .variant-table th, .variant-table td { padding: 0.4rem 0.5rem; text-align: left; border-bottom: 1px solid #eee; font-size: 0.875rem; }
     .variant-table th { background: #f8f9fa; font-weight: 600; }
-    .variant-table input { width: 100%; padding: 0.35rem; }
-    .empty-variants { color: #999; font-size: 0.9rem; }
-    .variant-select-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1rem; }
-    .checkbox-group { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; }
-    .checkbox-label { display: inline-flex; align-items: center; gap: 0.35rem; cursor: pointer; font-size: 0.9rem; }
+    .variant-table input { width: 100%; padding: 0.35rem; max-width: 56px; }
+    .variant-select-row { display: flex; flex-direction: column; gap: 1rem; margin-bottom: 1rem; }
+    @media (min-width: 640px) { .variant-select-row { flex-direction: row; grid-template-columns: 1fr 1fr; gap: 1.5rem; display: grid; } }
+    .checkbox-group { display: flex; flex-wrap: wrap; gap: 0.4rem 0.75rem; }
+    .checkbox-label { display: inline-flex; align-items: center; gap: 0.35rem; cursor: pointer; font-size: 0.875rem; }
     .muted { color: #999; font-size: 0.85rem; }
-    .stock-matrix { margin-top: 1rem; overflow-x: auto; }
+    .stock-matrix { margin-top: 1rem; overflow-x: auto; -webkit-overflow-scrolling: touch; }
     .stock-matrix h4 { font-size: 0.95rem; margin-bottom: 0.5rem; }
-    .stock-input { width: 60px; text-align: center; }
+    .stock-input { width: 52px; text-align: center; }
+    @media (min-width: 480px) { .stock-input { width: 60px; } }
     .color-cell { font-weight: 500; }
-    .form-actions { display: flex; gap: 1rem; justify-content: flex-end; margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid #eee; }
+    .form-actions { display: flex; flex-direction: column-reverse; gap: 0.75rem; margin-top: 1.5rem; padding-top: 1.25rem; border-top: 1px solid #eee; }
+    @media (min-width: 480px) { .form-actions { flex-direction: row; justify-content: flex-end; gap: 1rem; margin-top: 2rem; padding-top: 1.5rem; } }
+    .form-actions .btn { width: 100%; text-align: center; }
+    @media (min-width: 480px) { .form-actions .btn { width: auto; } }
   `],
 })
 export class ProductFormComponent implements OnInit {

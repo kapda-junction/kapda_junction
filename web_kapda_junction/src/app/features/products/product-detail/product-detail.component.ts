@@ -1,4 +1,4 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, OnInit, HostListener, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { Store } from '@ngrx/store';
@@ -19,20 +19,53 @@ import { of } from 'rxjs';
       @else if (product) {
         <div class="detail">
           <div class="gallery">
-            <img [src]="selectedImage || product.images?.[0] || 'https://via.placeholder.com/400'" [alt]="product.name" />
+            <button type="button" class="main-img-wrap" (click)="openLightbox()" [class.clickable]="product.images?.length > 1">
+              <img [src]="selectedImage || product.images?.[0] || 'https://via.placeholder.com/400'" [alt]="product.name" />
+              @if (product.images?.length > 1) {
+                <span class="gallery-hint">Click to view gallery</span>
+              }
+            </button>
             @if (product.images?.length > 1) {
               <div class="thumbnails">
-                @for (img of product.images; track img) {
-                  <button type="button" class="thumb" [class.active]="selectedImage === img" (click)="selectedImage = img">
+                @for (img of product.images; track img; let i = $index) {
+                  <button type="button" class="thumb" [class.active]="selectedImage === img" (click)="selectImage(img); openLightbox(); $event.stopPropagation()">
                     <img [src]="img" [alt]="product.name" />
                   </button>
                 }
               </div>
             }
           </div>
+          <!-- Image lightbox -->
+          @if (lightboxOpen && product.images?.length) {
+            <div class="lightbox-overlay" (click)="closeLightbox()" (keydown.escape)="closeLightbox()">
+              <button type="button" class="lightbox-close" (click)="closeLightbox()" aria-label="Close">×</button>
+              @if (product.images.length > 1) {
+                <button type="button" class="lightbox-prev" (click)="lightboxPrev(); $event.stopPropagation()" aria-label="Previous">‹</button>
+                <button type="button" class="lightbox-next" (click)="lightboxNext(); $event.stopPropagation()" aria-label="Next">›</button>
+              }
+              <div class="lightbox-content" (click)="$event.stopPropagation()">
+                <img [src]="lightboxImage" [alt]="product.name" />
+              </div>
+              @if (product.images.length > 1) {
+                <div class="lightbox-dots">
+                  @for (img of product.images; track img; let i = $index) {
+                    <button type="button" class="lightbox-dot" [class.active]="lightboxIndex === i" (click)="goToLightboxImage(i); $event.stopPropagation()" [attr.aria-label]="'Image ' + (i+1)"></button>
+                  }
+                </div>
+              }
+            </div>
+          }
           <div class="info">
             <h1>{{ product.name }}</h1>
-            <p class="price">₹{{ product.price }}</p>
+            <div class="price-block">
+              @if (product.compareAtPrice && product.compareAtPrice > product.price) {
+                <span class="price-original">₹{{ product.compareAtPrice }}</span>
+                <span class="price-offer">₹{{ product.price }}</span>
+                <span class="price-off-badge">{{ getDiscountPercent() }}% OFF</span>
+              } @else {
+                <span class="price-single">₹{{ product.price }}</span>
+              }
+            </div>
             <p class="desc">{{ product.description || "Premium men's wear." }}</p>
 
             @if (product.variants?.length) {
@@ -100,7 +133,34 @@ import { of } from 'rxjs';
     @media (min-width: 768px) {
       .detail { grid-template-columns: 1fr 1fr; gap: 2rem; }
     }
-    .gallery img { width: 100%; border-radius: var(--radius); aspect-ratio: 1; object-fit: cover; }
+    .main-img-wrap { background: none; border: none; padding: 0; cursor: default; position: relative; display: block; width: 100%; }
+    .main-img-wrap.clickable { cursor: pointer; }
+    .main-img-wrap img { width: 100%; border-radius: var(--radius); aspect-ratio: 1; object-fit: cover; }
+    .gallery-hint { position: absolute; bottom: 0.5rem; left: 50%; transform: translateX(-50%); font-size: 0.75rem; background: rgba(0,0,0,0.6); color: #fff; padding: 0.25rem 0.5rem; border-radius: 4px; white-space: nowrap; }
+    .lightbox-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.92); z-index: 1000;
+      display: flex; align-items: center; justify-content: center; padding: 2rem;
+    }
+    .lightbox-close { position: absolute; top: 1rem; right: 1rem; background: rgba(255,255,255,0.2); border: none; color: #fff; font-size: 2rem; width: 44px; height: 44px; border-radius: 50%; cursor: pointer; line-height: 1; transition: background 0.2s; }
+    .lightbox-close:hover { background: rgba(255,255,255,0.35); }
+    .lightbox-prev, .lightbox-next { position: absolute; top: 50%; transform: translateY(-50%); background: rgba(255,255,255,0.2); border: none; color: #fff; font-size: 2.5rem; width: 48px; height: 48px; cursor: pointer; line-height: 1; border-radius: 50%; transition: background 0.2s; }
+    .lightbox-prev { left: 0.5rem; }
+    .lightbox-next { right: 0.5rem; }
+    .lightbox-prev:hover, .lightbox-next:hover { background: rgba(255,255,255,0.4); }
+    .lightbox-content { max-width: 90vw; max-height: 85vh; display: flex; align-items: center; justify-content: center; }
+    .lightbox-content img { max-width: 100%; max-height: 85vh; object-fit: contain; border-radius: 8px; }
+    .lightbox-dots { position: absolute; bottom: 1.5rem; left: 50%; transform: translateX(-50%); display: flex; gap: 0.5rem; }
+    .lightbox-dot { width: 10px; height: 10px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.6); background: transparent; cursor: pointer; padding: 0; transition: all 0.2s; }
+    .lightbox-dot:hover, .lightbox-dot.active { background: #fff; border-color: #fff; }
+    .price-block { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.75rem; margin-bottom: 1rem; }
+    .price-original { font-size: 1.1rem; color: #999; text-decoration: line-through; }
+    .price-offer { font-size: 1.5rem; font-weight: 700; color: var(--color-primary); }
+    .price-off-badge { font-size: 0.8rem; font-weight: 600; background: #dc3545; color: #fff; padding: 0.2rem 0.5rem; border-radius: 4px; }
+    .price-single { font-size: 1.5rem; font-weight: 700; color: var(--color-primary); }
+    .main-img-wrap { position: relative; display: block; width: 100%; padding: 0; border: none; background: none; cursor: default; }
+    .main-img-wrap.clickable { cursor: pointer; }
+    .main-img-wrap img { width: 100%; border-radius: var(--radius); aspect-ratio: 1; object-fit: cover; display: block; }
+    .gallery-hint { position: absolute; bottom: 0.5rem; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.6); color: #fff; font-size: 0.75rem; padding: 0.25rem 0.5rem; border-radius: 4px; }
     .thumbnails { display: flex; gap: 0.5rem; margin-top: 0.75rem; flex-wrap: wrap; }
     .thumb { width: 56px; height: 56px; padding: 0; border-radius: var(--radius-sm); overflow: hidden; border: 2px solid transparent; cursor: pointer; }
     .thumb.active { border-color: var(--color-accent); }
@@ -164,6 +224,29 @@ import { of } from 'rxjs';
     .btn-share-wa { background: #25d366; color: #fff; border-color: #25d366; }
     .btn-share-wa:hover { background: #20bd5a; border-color: #20bd5a; }
     .back { color: var(--color-primary); text-decoration: none; font-weight: 500; }
+    .main-img-wrap { position: relative; padding: 0; border: none; background: none; cursor: default; width: 100%; display: block; }
+    .main-img-wrap.clickable { cursor: pointer; }
+    .main-img-wrap img { width: 100%; border-radius: var(--radius); aspect-ratio: 1; object-fit: cover; display: block; }
+    .gallery-hint { position: absolute; bottom: 0.5rem; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.6); color: #fff; font-size: 0.75rem; padding: 0.25rem 0.5rem; border-radius: 4px; }
+    .price-block { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1rem; margin-bottom: 1rem; }
+    .price-original { font-size: 1rem; color: #999; text-decoration: line-through; }
+    .price-offer { font-size: 1.5rem; font-weight: 700; color: var(--color-primary); }
+    .price-off-badge { font-size: 0.8rem; font-weight: 600; background: #dc3545; color: #fff; padding: 0.2rem 0.5rem; border-radius: 4px; }
+    .price-single { font-size: 1.5rem; font-weight: 700; color: var(--color-primary); }
+    .lightbox-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.9); z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 2rem;
+    }
+    .lightbox-close { position: absolute; top: 1rem; right: 1rem; background: rgba(255,255,255,0.2); color: #fff; border: none; width: 44px; height: 44px; border-radius: 50%; font-size: 1.5rem; cursor: pointer; z-index: 10001; }
+    .lightbox-close:hover { background: rgba(255,255,255,0.35); }
+    .lightbox-prev, .lightbox-next { position: absolute; top: 50%; transform: translateY(-50%); background: rgba(255,255,255,0.2); color: #fff; border: none; width: 48px; height: 48px; border-radius: 50%; font-size: 2rem; cursor: pointer; z-index: 10001; line-height: 1; }
+    .lightbox-prev { left: 0.5rem; }
+    .lightbox-next { right: 0.5rem; }
+    .lightbox-prev:hover, .lightbox-next:hover { background: rgba(255,255,255,0.35); }
+    .lightbox-content { max-width: 90vw; max-height: 85vh; }
+    .lightbox-content img { max-width: 100%; max-height: 85vh; object-fit: contain; border-radius: 8px; }
+    .lightbox-dots { position: absolute; bottom: 1rem; left: 50%; transform: translateX(-50%); display: flex; gap: 0.5rem; z-index: 10001; }
+    .lightbox-dot { width: 10px; height: 10px; border-radius: 50%; background: rgba(255,255,255,0.5); border: none; cursor: pointer; padding: 0; }
+    .lightbox-dot.active { background: #fff; }
   `],
 })
 export class ProductDetailComponent implements OnInit {
@@ -174,7 +257,57 @@ export class ProductDetailComponent implements OnInit {
   selectedSize: string | null = null;
 
   shareCopied = false;
+  lightboxOpen = false;
+  lightboxIndex = 0;
   private settings = inject(SettingsService);
+
+  get lightboxImage(): string {
+    const imgs = this.product?.images ?? [];
+    return imgs[this.lightboxIndex] ?? imgs[0] ?? '';
+  }
+
+  selectImage(img: string) {
+    this.selectedImage = img;
+    const idx = this.product?.images?.indexOf(img) ?? 0;
+    this.lightboxIndex = idx >= 0 ? idx : 0;
+  }
+
+  openLightbox() {
+    if (!this.product?.images?.length) return;
+    this.lightboxIndex = this.product.images.indexOf(this.selectedImage ?? this.product.images[0]);
+    if (this.lightboxIndex < 0) this.lightboxIndex = 0;
+    this.lightboxOpen = true;
+    document.body.style.overflow = 'hidden';
+  }
+
+  closeLightbox() {
+    this.lightboxOpen = false;
+    document.body.style.overflow = '';
+  }
+
+  lightboxPrev() {
+    const n = this.product?.images?.length ?? 1;
+    this.lightboxIndex = (this.lightboxIndex - 1 + n) % n;
+    this.selectedImage = this.product.images[this.lightboxIndex];
+  }
+
+  lightboxNext() {
+    const n = this.product?.images?.length ?? 1;
+    this.lightboxIndex = (this.lightboxIndex + 1) % n;
+    this.selectedImage = this.product.images[this.lightboxIndex];
+  }
+
+  goToLightboxImage(i: number) {
+    this.lightboxIndex = i;
+    this.selectedImage = this.product?.images?.[i] ?? null;
+  }
+
+  getDiscountPercent(): number {
+    const p = this.product?.price;
+    const c = this.product?.compareAtPrice;
+    if (!c || !p || c <= p) return 0;
+    return Math.round(((c - p) / c) * 100);
+  }
 
   constructor(
     private route: ActivatedRoute,

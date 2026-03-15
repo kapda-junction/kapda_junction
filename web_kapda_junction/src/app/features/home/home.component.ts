@@ -6,6 +6,7 @@ import { CartActions } from '../../core/features/cart/store/cart.actions';
 import { Store } from '@ngrx/store';
 import { WhatsAppButtonComponent } from '../../shared/whatsapp-button/whatsapp-button.component';
 import { ProductImageSliderComponent } from '../../shared/product-image-slider/product-image-slider.component';
+import { ProductPriceComponent } from '../../shared/product-price/product-price.component';
 
 interface LandingSection {
   category: { _id: string; name: string; slug: string };
@@ -16,7 +17,7 @@ interface LandingSection {
 @Component({
   selector: 'app-home',
   standalone: true,
-  imports: [CommonModule, RouterLink, WhatsAppButtonComponent, ProductImageSliderComponent],
+  imports: [CommonModule, RouterLink, WhatsAppButtonComponent, ProductImageSliderComponent, ProductPriceComponent],
   template: `
     <div class="home-page">
       <section class="hero-carousel">
@@ -31,7 +32,7 @@ interface LandingSection {
                     <a [routerLink]="['/products', p._id]" class="patch">
                       <img [src]="p.images?.[0] || ''" [alt]="p.name" />
                       <span class="patch-name">{{ p.name }}</span>
-                      <span class="patch-price">₹{{ p.price }}</span>
+                      <span class="patch-price"><app-product-price [price]="p.price" [compareAtPrice]="p.compareAtPrice" /></span>
                     </a>
                   }
                 </div>
@@ -92,7 +93,7 @@ interface LandingSection {
                   </div>
                   <div class="card-body">
                     <h3>{{ p.name }}</h3>
-                    <p class="price">₹{{ p.price }}</p>
+                    <p class="price"><app-product-price [price]="p.price" [compareAtPrice]="p.compareAtPrice" /></p>
                     @if (hasVariants(p)) {
                       <span class="btn-select">View Product</span>
                     } @else {
