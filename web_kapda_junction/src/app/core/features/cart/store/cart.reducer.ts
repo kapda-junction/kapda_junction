@@ -48,5 +48,6 @@ export const cartReducer = createReducer(
       itemMatches(i, productId, variant) ? { ...i, quantity } : i
     ),
   })),
-  on(CartActions.clearCart, () => initialState)
+  on(CartActions.clearCart, () => initialState),
+  on(CartActions.setItems, (_, { items }) => ({ items }))
 );

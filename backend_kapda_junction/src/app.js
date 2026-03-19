@@ -10,6 +10,7 @@ const errorHandler = require('./middleware/errorHandler');
 const productRoutes = require('./routes/productRoutes');
 const categoryRoutes = require('./routes/categoryRoutes');
 const orderRoutes = require('./routes/orderRoutes');
+const cartRoutes = require('./routes/cartRoutes');
 const authRoutes = require('./routes/authRoutes');
 const uploadRoutes = require('./routes/uploadRoutes');
 const settingRoutes = require('./routes/settingRoutes');
@@ -35,9 +36,6 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 app.use(morgan('dev'));
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-
 // Ensure DB connected (for Vercel serverless)
 app.use(async (req, res, next) => {
   try {
@@ -48,11 +46,16 @@ app.use(async (req, res, next) => {
     res.status(500).json({ message: 'Database connection failed' });
   }
 });
+// Razorpay webhook MUST use raw body for signature verification - before express.json
+app.post('/api/orders/webhook', express.raw({ type: 'application/json' }), require('./controllers/orderController').webhook);
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 // API Routes
 app.use('/api/products', productRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/orders', orderRoutes);
+app.use('/api/cart', cartRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/settings', settingRoutes);

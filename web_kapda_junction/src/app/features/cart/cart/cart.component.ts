@@ -46,7 +46,7 @@ import { CartActions } from '../../../core/features/cart/store/cart.actions';
           <a routerLink="/products" class="link-back">← Continue Shopping</a>
           <div class="total-wrap">
             <strong>Total: ₹{{ total$ | async }}</strong>
-            <button type="button" class="btn-checkout">Proceed to Checkout</button>
+            <a routerLink="/checkout" class="btn-checkout">Proceed to Checkout</a>
           </div>
         </div>
       }

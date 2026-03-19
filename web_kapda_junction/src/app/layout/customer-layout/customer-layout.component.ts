@@ -1,8 +1,11 @@
 import { Component, OnInit, inject } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { CommonModule } from '@angular/common';
-import { selectCartCount } from '../../core/features/cart/store/cart.selectors';
 import { Store } from '@ngrx/store';
+import { map } from 'rxjs/operators';
+import { selectCartCount } from '../../core/features/cart/store/cart.selectors';
+import { selectAuthState } from '../../core/features/auth/store/auth.selectors';
+import { AuthActions } from '../../core/features/auth/store/auth.actions';
 import { SettingsService } from '../../core/services/settings.service';
 
 @Component({
@@ -20,6 +23,11 @@ import { SettingsService } from '../../core/services/settings.service';
           <a routerLink="/cart" class="cart-link" routerLinkActive="active">
             Cart <span class="badge">{{ cartCount$ | async }}</span>
           </a>
+          @if (isAuth$ | async) {
+            <button type="button" class="btn-logout" (click)="logout()">Logout</button>
+          } @else {
+            <a routerLink="/login" routerLinkActive="active">Login</a>
+          }
         </nav>
       </div>
     </header>
@@ -116,6 +124,10 @@ import { SettingsService } from '../../core/services/settings.service';
     @media (min-width: 480px) { .nav a { font-size: 0.95rem; } }
     @media (min-width: 640px) { .nav a { font-size: 1rem; } }
     .nav a:hover, .nav a.active { color: #fff; }
+.btn-logout { background: none; border: none; color: rgba(255,255,255,0.85); font: inherit; cursor: pointer; padding: 0; }
+.btn-logout:hover { color: #fff; }
+    .btn-logout { background: none; border: none; color: rgba(255,255,255,0.85); font-weight: 500; font-size: 0.95rem; cursor: pointer; padding: 0; }
+    .btn-logout:hover { color: #fff; }
     .cart-link { position: relative; }
     .badge {
       display: inline-flex;
@@ -217,6 +229,7 @@ export class CustomerLayoutComponent implements OnInit {
   private store = inject(Store);
   private settings = inject(SettingsService);
   cartCount$ = this.store.select(selectCartCount);
+  isAuth$ = this.store.select(selectAuthState).pipe(map((a) => a?.isAuthenticated ?? false));
   waHref = '';
   currentYear = new Date().getFullYear();
 
@@ -224,5 +237,9 @@ export class CustomerLayoutComponent implements OnInit {
     this.settings.getWhatsapp().subscribe((num) => {
       this.waHref = this.settings.getWhatsappUrl(num);
     });
+  }
+
+  logout() {
+    this.store.dispatch(AuthActions.logout());
   }
 }

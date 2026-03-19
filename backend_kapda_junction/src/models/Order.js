@@ -15,8 +15,18 @@ const orderSchema = new mongoose.Schema({
   status: { type: String, enum: ['pending', 'confirmed', 'shipped', 'delivered', 'cancelled'], default: 'pending' },
   totalAmount: { type: Number, required: true },
   shippingAddress: { type: mongoose.Schema.Types.Mixed, required: true },
-  paymentMethod: String,
-  paymentStatus: { type: String, enum: ['pending', 'paid', 'failed'], default: 'pending' }
+  paymentMethod: { type: String, default: 'razorpay' },
+  paymentStatus: { type: String, enum: ['pending', 'paid', 'failed', 'refunded', 'partially_refunded'], default: 'pending' },
+  razorpayOrderId: String,
+  razorpayPaymentId: String,
+  razorpaySignature: String,
+  // Refund tracking
+  razorpayRefundId: String,
+  refundStatus: { type: String, enum: ['', 'pending', 'processed', 'failed'], default: '' },
+  refundAmount: Number,
+  cancelReason: String,
+  cancelledAt: Date,
+  cancelledBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
 }, { timestamps: true });
 
 module.exports = mongoose.model('Order', orderSchema);
