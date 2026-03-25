@@ -1,7 +1,10 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, DestroyRef, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { Store } from '@ngrx/store';
+import { Subject } from 'rxjs';
+import { debounceTime, distinctUntilChanged, map } from 'rxjs/operators';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ProductActions } from '../../../core/features/products/store/product.actions';
 import { selectAllProducts, selectProductsLoading } from '../../../core/features/products/store/product.selectors';
 import { CartActions } from '../../../core/features/cart/store/cart.actions';
@@ -16,6 +19,18 @@ import { ProductPriceComponent } from '../../../shared/product-price/product-pri
   template: `
     <div class="container">
       <h1 class="page-title">Men's Wear</h1>
+      <div class="search-row">
+        <label class="sr-only" for="shop-search">Search products</label>
+        <input
+          id="shop-search"
+          type="search"
+          class="search-input"
+          placeholder="Search by name or description..."
+          autocomplete="off"
+          [value]="listSearchValue"
+          (input)="onSearchInput($event)"
+        />
+      </div>
       @if (loading$ | async) {
         <div class="loading">Loading...</div>
       } @else {
@@ -45,7 +60,22 @@ import { ProductPriceComponent } from '../../../shared/product-price/product-pri
     </div>
   `,
   styles: [`
-    .page-title { font-size: 1.75rem; margin-bottom: 1.5rem; color: var(--text-primary); }
+    .page-title { font-size: 1.75rem; margin-bottom: 0.75rem; color: var(--text-primary); }
+    .search-row { margin-bottom: 1.25rem; }
+    .search-input {
+      width: 100%; max-width: 28rem;
+      padding: 0.65rem 0.9rem;
+      border: 1px solid var(--border-color, #e2e8f0);
+      border-radius: var(--radius-sm);
+      font-size: 1rem;
+      background: var(--bg-card);
+      color: var(--text-primary);
+    }
+    .search-input:focus { outline: 2px solid var(--color-primary); outline-offset: 1px; }
+    .sr-only {
+      position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+      overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0;
+    }
     .loading { padding: 3rem; text-align: center; color: var(--text-secondary); }
     .grid {
       display: grid;
@@ -97,11 +127,46 @@ import { ProductPriceComponent } from '../../../shared/product-price/product-pri
 })
 export class ProductListComponent implements OnInit {
   private store = inject(Store);
+  private route = inject(ActivatedRoute);
+  private router = inject(Router);
+  private destroyRef = inject(DestroyRef);
+  private searchTerms = new Subject<string>();
+
   products$ = this.store.select(selectAllProducts);
   loading$ = this.store.select(selectProductsLoading);
+  listSearchValue = '';
+
+  constructor() {
+    this.searchTerms
+      .pipe(debounceTime(350), distinctUntilChanged(), takeUntilDestroyed())
+      .subscribe((term) => {
+        const t = term.trim();
+        this.router.navigate(['/products'], {
+          queryParams: t ? { search: t } : {},
+          replaceUrl: true,
+        });
+      });
+  }
 
   ngOnInit() {
-    this.store.dispatch(ProductActions.loadProductsRequest());
+    this.route.queryParamMap
+      .pipe(
+        map((p) => p.get('search') || ''),
+        distinctUntilChanged(),
+        takeUntilDestroyed(this.destroyRef)
+      )
+      .subscribe((term) => {
+        this.listSearchValue = term;
+        this.store.dispatch(
+          ProductActions.loadProductsRequest({ params: term ? { search: term } : {} })
+        );
+      });
+  }
+
+  onSearchInput(ev: Event) {
+    const v = (ev.target as HTMLInputElement)?.value ?? '';
+    this.listSearchValue = v;
+    this.searchTerms.next(v);
   }
 
   hasVariants(p: any): boolean {

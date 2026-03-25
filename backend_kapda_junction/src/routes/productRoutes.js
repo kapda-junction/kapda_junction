@@ -10,5 +10,6 @@ router.get('/:id', optionalAuth, productController.getOne);
 router.post('/', protect, authorize('admin'), productController.create);
 router.put('/:id', protect, authorize('admin'), productController.update);
 router.delete('/:id', protect, authorize('admin'), productController.delete);
+router.post('/ai-search', productController.aiSearch);
 
 module.exports = router;

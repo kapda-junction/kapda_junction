@@ -17,6 +17,7 @@ const productSchema = new mongoose.Schema({
   subcategory: { type: mongoose.Schema.Types.ObjectId, ref: 'Category' },
   images: [{ type: String }],
   variants: [variantSchema],
+  embedding: [Number],
   soldOut: { type: Boolean, default: false },
   isActive: { type: Boolean, default: true },
   isFeatured: { type: Boolean, default: false },

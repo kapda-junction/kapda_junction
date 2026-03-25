@@ -1,7 +1,14 @@
-import { Component, OnInit, inject } from '@angular/core';
-import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { Component, HostListener, OnInit, inject, viewChild, ElementRef } from '@angular/core';
+import {
+  RouterLink,
+  RouterLinkActive,
+  RouterOutlet,
+  Router,
+  NavigationEnd,
+} from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { Store } from '@ngrx/store';
+import { filter } from 'rxjs/operators';
 import { map } from 'rxjs/operators';
 import { selectCartCount } from '../../core/features/cart/store/cart.selectors';
 import { selectAuthState } from '../../core/features/auth/store/auth.selectors';
@@ -15,8 +22,60 @@ import { SettingsService } from '../../core/services/settings.service';
   template: `
     <div class="layout-wrap">
     <header class="header">
-      <div class="container header-inner">
+      <div class="container header-bar">
         <a routerLink="/" class="logo">Kapda Junction</a>
+        <form
+          class="global-search"
+          [class.mobile-open]="mobileSearchOpen"
+          (submit)="onGlobalSearchSubmit($event)"
+        >
+          <label class="sr-only" for="global-search-input">Search products</label>
+          <input
+            #globalSearchInput
+            id="global-search-input"
+            type="search"
+            name="q"
+            class="global-search-input"
+            placeholder="Search products..."
+            autocomplete="off"
+            [value]="globalSearchValue"
+            (input)="onGlobalSearchInput($event)"
+          />
+          <button type="submit" class="global-search-submit" aria-label="Search">
+            <svg class="icon-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <circle cx="11" cy="11" r="8"></circle>
+              <path d="m21 21-4.3-4.3"></path>
+            </svg>
+          </button>
+        </form>
+        @if (!mobileSearchOpen) {
+          <button
+            type="button"
+            class="search-toggle"
+            (click)="toggleMobileSearch()"
+            aria-expanded="false"
+            aria-controls="global-search-input"
+            aria-label="Open search"
+          >
+            <svg class="icon-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <circle cx="11" cy="11" r="8"></circle>
+              <path d="m21 21-4.3-4.3"></path>
+            </svg>
+          </button>
+        } @else {
+          <button
+            type="button"
+            class="search-close"
+            (click)="closeMobileSearch()"
+            aria-expanded="true"
+            aria-controls="global-search-input"
+            aria-label="Close search"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22" aria-hidden="true">
+              <path d="M18 6L6 18M6 6l12 12"></path>
+            </svg>
+          </button>
+        }
         <nav class="nav">
           <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Home</a>
           <a routerLink="/products" routerLinkActive="active">Shop</a>
@@ -67,29 +126,129 @@ import { SettingsService } from '../../core/services/settings.service';
       background: var(--color-primary);
       color: #fff;
       box-shadow: var(--shadow-sm);
-      overflow-x: hidden;
+      overflow: visible;
     }
     .header .container { padding-left: 0.75rem; padding-right: 0.75rem; }
     @media (min-width: 360px) {
       .header .container { padding-left: 1rem; padding-right: 1rem; }
     }
-    .header-inner {
+    .header-bar {
+      position: relative;
       display: flex;
       justify-content: space-between;
       align-items: center;
       min-height: 52px;
       height: var(--header-h);
       padding: 0.4rem 0;
-      gap: 0.5rem;
+      gap: 0.45rem;
     }
     @media (min-width: 375px) {
-      .header-inner { min-height: 54px; gap: 0.6rem; }
+      .header-bar { min-height: 54px; gap: 0.5rem; }
     }
     @media (min-width: 480px) {
-      .header-inner { min-height: var(--header-h); padding: 0; gap: 0.75rem; }
+      .header-bar { min-height: var(--header-h); padding: 0; gap: 0.65rem; }
     }
     @media (min-width: 640px) {
-      .header-inner { gap: 1.25rem; }
+      .header-bar { gap: 0.85rem; }
+    }
+    @media (min-width: 768px) {
+      .header-bar { gap: 1rem; }
+    }
+    .sr-only {
+      position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+      overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0;
+    }
+    .global-search {
+      flex: 1;
+      min-width: 0;
+      max-width: 26rem;
+      display: flex;
+      align-items: stretch;
+      gap: 0;
+      margin: 0 auto;
+    }
+    .global-search-input {
+      flex: 1;
+      min-width: 0;
+      padding: 0.45rem 0.65rem;
+      border: none;
+      border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+      font-size: 0.9rem;
+      background: rgba(255,255,255,0.95);
+      color: var(--text-primary, #1a1a1a);
+    }
+    .global-search-input::placeholder { color: rgba(0,0,0,0.45); }
+    .global-search-input:focus {
+      outline: 2px solid var(--color-accent, #f59e0b);
+      outline-offset: 0;
+      z-index: 1;
+    }
+    .global-search-submit {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 0.65rem;
+      border: none;
+      border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+      background: rgba(255,255,255,0.22);
+      color: #fff;
+      cursor: pointer;
+      transition: background var(--transition);
+    }
+    .global-search-submit:hover { background: rgba(255,255,255,0.32); }
+    .icon-search { width: 18px; height: 18px; display: block; }
+    @media (min-width: 480px) {
+      .global-search-input { padding: 0.5rem 0.75rem; font-size: 0.95rem; }
+    }
+    .search-toggle,
+    .search-close {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      width: 40px;
+      height: 40px;
+      padding: 0;
+      border: none;
+      border-radius: var(--radius-sm);
+      background: rgba(255,255,255,0.15);
+      color: #fff;
+      cursor: pointer;
+      transition: background var(--transition);
+    }
+    .search-toggle:hover,
+    .search-close:hover { background: rgba(255,255,255,0.25); }
+    @media (max-width: 767px) {
+      .global-search {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 100%;
+        max-width: none;
+        margin: 0;
+        padding: 0.6rem 0.75rem;
+        background: var(--color-primary);
+        box-shadow: 0 12px 24px rgba(0,0,0,0.18);
+        display: none;
+        z-index: 60;
+      }
+      .global-search.mobile-open { display: flex; }
+      .search-toggle { display: flex; }
+      .global-search-input { border-radius: var(--radius-sm) 0 0 var(--radius-sm); font-size: 16px; }
+    }
+    @media (min-width: 768px) {
+      .search-toggle { display: none !important; }
+      .search-close { display: none !important; }
+      .global-search {
+        position: relative;
+        top: auto;
+        left: auto;
+        right: auto;
+        padding: 0;
+        box-shadow: none;
+        background: transparent;
+        display: flex !important;
+      }
     }
     .logo {
       font-weight: 700;
@@ -228,15 +387,60 @@ import { SettingsService } from '../../core/services/settings.service';
 export class CustomerLayoutComponent implements OnInit {
   private store = inject(Store);
   private settings = inject(SettingsService);
+  private router = inject(Router);
+  globalSearchInput = viewChild<ElementRef<HTMLInputElement>>('globalSearchInput');
+
   cartCount$ = this.store.select(selectCartCount);
   isAuth$ = this.store.select(selectAuthState).pipe(map((a) => a?.isAuthenticated ?? false));
   waHref = '';
   currentYear = new Date().getFullYear();
+  globalSearchValue = '';
+  mobileSearchOpen = false;
 
   ngOnInit() {
+    this.syncSearchFromUrl();
+    this.router.events
+      .pipe(filter((e): e is NavigationEnd => e instanceof NavigationEnd))
+      .subscribe(() => this.syncSearchFromUrl());
+
     this.settings.getWhatsapp().subscribe((num) => {
       this.waHref = this.settings.getWhatsappUrl(num);
     });
+  }
+
+  @HostListener('document:keydown.escape')
+  onEscapeCloseSearch() {
+    if (this.mobileSearchOpen) {
+      this.closeMobileSearch();
+    }
+  }
+
+  syncSearchFromUrl() {
+    const tree = this.router.parseUrl(this.router.url);
+    const q = tree.queryParams['search'];
+    this.globalSearchValue = typeof q === 'string' ? q : '';
+  }
+
+  onGlobalSearchInput(ev: Event) {
+    this.globalSearchValue = (ev.target as HTMLInputElement)?.value ?? '';
+  }
+
+  onGlobalSearchSubmit(ev: Event) {
+    ev.preventDefault();
+    const q = this.globalSearchValue.trim();
+    this.router.navigate(['/products'], { queryParams: q ? { search: q } : {} });
+    this.closeMobileSearch();
+  }
+
+  toggleMobileSearch() {
+    this.mobileSearchOpen = !this.mobileSearchOpen;
+    if (this.mobileSearchOpen) {
+      queueMicrotask(() => this.globalSearchInput()?.nativeElement?.focus());
+    }
+  }
+
+  closeMobileSearch() {
+    this.mobileSearchOpen = false;
   }
 
   logout() {

@@ -13,12 +13,16 @@ export class ProductEffects {
     () =>
     this.actions$.pipe(
       ofType(ProductActions.loadProductsRequest),
-      switchMap(() =>
-        this.api.get<{ products: any[] }>('/products').pipe(
+      switchMap(({ params }) => {
+        const q =
+          params && Object.keys(params).length > 0
+            ? Object.fromEntries(Object.entries(params).filter(([, v]) => v != null && v !== ''))
+            : undefined;
+        return this.api.get<{ products: any[] }>('/products', q).pipe(
           map((res) => ProductActions.loadProductsSuccess({ products: res?.products ?? [] })),
           catchError((err) => of(ProductActions.loadProductsFailure({ error: err.message })))
-        )
-      )
+        );
+      })
     )
   );
 }
