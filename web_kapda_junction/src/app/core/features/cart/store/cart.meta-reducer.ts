@@ -22,7 +22,11 @@ export function cartStorageMetaReducer(reducer: ActionReducer<CartState>): Actio
     const nextState = reducer(state, action);
     if (typeof localStorage !== 'undefined' && nextState?.items) {
       try {
-        localStorage.setItem(CART_KEY, JSON.stringify({ items: nextState.items }));
+        if (nextState.items.length > 0) {
+          localStorage.setItem(CART_KEY, JSON.stringify({ items: nextState.items }));
+        } else {
+          localStorage.removeItem(CART_KEY);
+        }
       } catch {}
     }
     return nextState;

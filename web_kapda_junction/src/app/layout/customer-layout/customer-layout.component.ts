@@ -1,4 +1,4 @@
-import { Component, HostListener, OnInit, inject, viewChild, ElementRef } from '@angular/core';
+import { Component, DestroyRef, HostListener, OnInit, inject, viewChild, ElementRef } from '@angular/core';
 import {
   RouterLink,
   RouterLinkActive,
@@ -8,11 +8,13 @@ import {
 } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { Store } from '@ngrx/store';
-import { filter } from 'rxjs/operators';
-import { map } from 'rxjs/operators';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { Subject, of } from 'rxjs';
+import { catchError, debounceTime, distinctUntilChanged, filter, map, switchMap, tap } from 'rxjs/operators';
 import { selectCartCount } from '../../core/features/cart/store/cart.selectors';
 import { selectAuthState } from '../../core/features/auth/store/auth.selectors';
 import { AuthActions } from '../../core/features/auth/store/auth.actions';
+import { ApiService } from '../../core/services/api.service';
 import { SettingsService } from '../../core/services/settings.service';
 
 @Component({
@@ -22,9 +24,10 @@ import { SettingsService } from '../../core/services/settings.service';
   template: `
     <div class="layout-wrap">
     <header class="header">
-      <div class="container header-bar">
+      <div #headerBar class="container header-bar">
         <a routerLink="/" class="logo">Kapda Junction</a>
         <form
+          #searchWrap
           class="global-search"
           [class.mobile-open]="mobileSearchOpen"
           (submit)="onGlobalSearchSubmit($event)"
@@ -47,6 +50,31 @@ import { SettingsService } from '../../core/services/settings.service';
               <path d="m21 21-4.3-4.3"></path>
             </svg>
           </button>
+
+          @if (suggestionsOpen) {
+            <div class="search-dropdown" role="listbox" aria-label="Product suggestions">
+              @if (suggestionsLoading) {
+                <div class="dropdown-item disabled">Loading...</div>
+              } @else if (suggestions.length === 0) {
+                <div class="dropdown-item disabled">No products found</div>
+              } @else {
+                @for (p of suggestions; track p._id) {
+                  <button type="button" class="dropdown-item" (click)="onGlobalSearchSuggestionClick(p)">
+                    @if (p.images?.length) {
+                      <img
+                        class="dropdown-thumb"
+                        [src]="p.images?.[0] || 'https://via.placeholder.com/34x34?text=%20'"
+                        [alt]="p.name"
+                        loading="lazy"
+                      />
+                    }
+                    <span class="dropdown-title">{{ p.name }}</span>
+                    @if (p.price != null) { <span class="dropdown-meta">₹{{ p.price }}</span> }
+                  </button>
+                }
+              }
+            </div>
+          }
         </form>
         @if (!mobileSearchOpen) {
           <button
@@ -76,7 +104,33 @@ import { SettingsService } from '../../core/services/settings.service';
             </svg>
           </button>
         }
-        <nav class="nav">
+        <a
+          routerLink="/cart"
+          class="mobile-cart-toggle"
+          aria-label="Open cart"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="22" height="22">
+            <circle cx="9" cy="21" r="1"></circle>
+            <circle cx="20" cy="21" r="1"></circle>
+            <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
+          </svg>
+          <span class="badge">{{ cartCount$ | async }}</span>
+        </a>
+        <button
+          type="button"
+          class="mobile-menu-toggle"
+          (click)="toggleMobileNav()"
+          [attr.aria-expanded]="mobileNavOpen ? 'true' : 'false'"
+          aria-label="Open menu"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="22" height="22">
+            <path d="M4 6h16" />
+            <path d="M4 12h16" />
+            <path d="M4 18h16" />
+          </svg>
+        </button>
+
+        <nav #navWrap class="nav" [class.mobile-open]="mobileNavOpen">
           <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Home</a>
           <a routerLink="/products" routerLinkActive="active">Shop</a>
           <a routerLink="/cart" class="cart-link" routerLinkActive="active">
@@ -166,6 +220,7 @@ import { SettingsService } from '../../core/services/settings.service';
       align-items: stretch;
       gap: 0;
       margin: 0 auto;
+      position: relative;
     }
     .global-search-input {
       flex: 1;
@@ -197,6 +252,58 @@ import { SettingsService } from '../../core/services/settings.service';
     }
     .global-search-submit:hover { background: rgba(255,255,255,0.32); }
     .icon-search { width: 18px; height: 18px; display: block; }
+    .search-dropdown {
+      position: absolute;
+      top: calc(100% + 0.25rem);
+      left: 0;
+      right: 0;
+      background: #fff;
+      color: #0f172a;
+      border-radius: var(--radius-sm);
+      box-shadow: 0 12px 24px rgba(0,0,0,0.18);
+      overflow: hidden;
+      z-index: 80;
+      max-height: 18rem;
+      overflow-y: auto;
+    }
+    .dropdown-item {
+      width: 100%;
+      border: none;
+      background: transparent;
+      text-align: left;
+      padding: 0.65rem 0.75rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+      cursor: pointer;
+      font: inherit;
+      color: inherit;
+    }
+    .dropdown-item:hover { background: rgba(59,130,246,0.08); }
+    .dropdown-item.disabled { cursor: default; opacity: 0.7; }
+    .dropdown-title {
+      min-width: 0;
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-weight: 600;
+    }
+    .dropdown-thumb {
+      width: 34px;
+      height: 34px;
+      border-radius: 8px;
+      object-fit: cover;
+      flex-shrink: 0;
+      background: rgba(0,0,0,0.05);
+    }
+    .dropdown-meta {
+      flex-shrink: 0;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--color-primary);
+    }
     @media (min-width: 480px) {
       .global-search-input { padding: 0.5rem 0.75rem; font-size: 0.95rem; }
     }
@@ -270,6 +377,139 @@ import { SettingsService } from '../../core/services/settings.service';
       align-items: center;
       flex-shrink: 0;
     }
+
+    .mobile-menu-toggle {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      width: 40px;
+      height: 40px;
+      padding: 0;
+      border: none;
+      border-radius: var(--radius-sm);
+      background: rgba(255,255,255,0.15);
+      color: #fff;
+      cursor: pointer;
+      transition: background var(--transition);
+    }
+    .mobile-menu-toggle:hover { background: rgba(255,255,255,0.25); }
+    .mobile-cart-toggle {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      width: 40px;
+      height: 40px;
+      padding: 0;
+      border-radius: var(--radius-sm);
+      background: rgba(255,255,255,0.15);
+      color: #fff;
+      text-decoration: none;
+      position: relative;
+      transition: background var(--transition);
+    }
+    .mobile-cart-toggle:hover { background: rgba(255,255,255,0.25); color: #fff; }
+    .mobile-cart-toggle .badge {
+      position: absolute;
+      top: -4px;
+      right: -4px;
+      margin-left: 0;
+      min-width: 1rem;
+      height: 1rem;
+      font-size: 0.6rem;
+      padding: 0 0.2rem;
+    }
+
+    @media (max-width: 767px) {
+      .header-bar {
+        justify-content: flex-start;
+        position: relative;
+      }
+      .mobile-menu-toggle { display: flex; }
+      .mobile-menu-toggle {
+        order: 1;
+        width: 32px;
+        height: 32px;
+        background: transparent;
+        border-radius: 0;
+        margin-right: 0.35rem;
+      }
+      .mobile-cart-toggle {
+        display: inline-flex;
+        order: 3;
+        width: 32px;
+        height: 32px;
+        background: transparent;
+        border-radius: 0;
+        margin-left: auto;
+        transform: translateX(10px);
+      }
+      .search-toggle,
+      .search-close {
+        order: 4;
+        margin-left: 0.2rem;
+        width: 32px;
+        height: 32px;
+        background: transparent;
+        border-radius: 0;
+      }
+      .logo {
+        position: absolute;
+        left: 50%;
+        transform: translateX(-50%);
+        max-width: 52%;
+        text-align: center;
+        font-size: 1.05rem;
+      }
+      .mobile-menu-toggle:hover,
+      .mobile-cart-toggle:hover,
+      .search-toggle:hover,
+      .search-close:hover {
+        background: transparent;
+      }
+      .mobile-menu-toggle svg,
+      .mobile-cart-toggle svg,
+      .search-toggle .icon-search,
+      .search-close svg {
+        width: 18px;
+        height: 18px;
+      }
+      .mobile-cart-toggle .badge {
+        top: -3px;
+        right: -5px;
+        min-width: 0.95rem;
+        height: 0.95rem;
+        font-size: 0.58rem;
+      }
+      .nav {
+        display: none;
+        flex-direction: column;
+        align-items: stretch;
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        margin-top: 0;
+        padding: 0.6rem 0.75rem;
+        background: var(--color-primary);
+        box-shadow: 0 12px 24px rgba(0,0,0,0.18);
+        gap: 0;
+        z-index: 75;
+      }
+      .nav.mobile-open { display: flex; }
+      .nav a {
+        padding: 0.65rem 0.25rem;
+        font-size: 0.95rem;
+      }
+      .cart-link {
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+        padding: 0.65rem 0.25rem;
+      }
+      /* base .btn-logout later in file overrides; final mobile override is below */
+    }
     @media (min-width: 375px) { .nav { gap: 0.6rem; } }
     @media (min-width: 480px) { .nav { gap: 0.9rem; } }
     @media (min-width: 640px) { .nav { gap: 1.25rem; } }
@@ -287,6 +527,20 @@ import { SettingsService } from '../../core/services/settings.service';
 .btn-logout:hover { color: #fff; }
     .btn-logout { background: none; border: none; color: rgba(255,255,255,0.85); font-weight: 500; font-size: 0.95rem; cursor: pointer; padding: 0; }
     .btn-logout:hover { color: #fff; }
+
+    @media (max-width: 767px) {
+      .nav.mobile-open .btn-logout {
+        padding: 0.65rem 0.75rem;
+        width: 100%;
+        display: block;
+        text-align: left;
+        background: rgba(255,255,255,0.12);
+        border: 1px solid rgba(255,255,255,0.2);
+        border-radius: 10px;
+        margin-top: 0.35rem;
+      }
+      .nav.mobile-open .btn-logout:hover { background: rgba(255,255,255,0.2); }
+    }
     .cart-link { position: relative; }
     .badge {
       display: inline-flex;
@@ -387,8 +641,12 @@ import { SettingsService } from '../../core/services/settings.service';
 export class CustomerLayoutComponent implements OnInit {
   private store = inject(Store);
   private settings = inject(SettingsService);
+  private api = inject(ApiService);
   private router = inject(Router);
+  private destroyRef = inject(DestroyRef);
   globalSearchInput = viewChild<ElementRef<HTMLInputElement>>('globalSearchInput');
+  searchWrap = viewChild<ElementRef>('searchWrap');
+  headerBar = viewChild<ElementRef>('headerBar');
 
   cartCount$ = this.store.select(selectCartCount);
   isAuth$ = this.store.select(selectAuthState).pipe(map((a) => a?.isAuthenticated ?? false));
@@ -396,12 +654,48 @@ export class CustomerLayoutComponent implements OnInit {
   currentYear = new Date().getFullYear();
   globalSearchValue = '';
   mobileSearchOpen = false;
+  mobileNavOpen = false;
+
+  suggestions: any[] = [];
+  suggestionsOpen = false;
+  suggestionsLoading = false;
+  private searchInput$ = new Subject<string>();
 
   ngOnInit() {
     this.syncSearchFromUrl();
     this.router.events
       .pipe(filter((e): e is NavigationEnd => e instanceof NavigationEnd))
-      .subscribe(() => this.syncSearchFromUrl());
+      .subscribe(() => {
+        this.syncSearchFromUrl();
+        this.mobileNavOpen = false;
+        this.mobileSearchOpen = false;
+        this.suggestionsOpen = false;
+      });
+
+    this.searchInput$
+      .pipe(
+        debounceTime(300),
+        distinctUntilChanged(),
+        tap((term) => {
+          const t = term.trim();
+          this.suggestionsLoading = t.length >= 2;
+          this.suggestionsOpen = t.length >= 2;
+          this.suggestions = [];
+        }),
+        switchMap((term) => {
+          const t = term.trim();
+          if (t.length < 2) return of([]);
+          return this.api.get<{ products: any[] }>('/products', { search: t, page: '1', limit: '6' }).pipe(
+            map((res) => res?.products ?? []),
+            catchError(() => of([]))
+          );
+        }),
+        takeUntilDestroyed(this.destroyRef)
+      )
+      .subscribe((products) => {
+        this.suggestionsLoading = false;
+        this.suggestions = products;
+      });
 
     this.settings.getWhatsapp().subscribe((num) => {
       this.waHref = this.settings.getWhatsappUrl(num);
@@ -410,8 +704,39 @@ export class CustomerLayoutComponent implements OnInit {
 
   @HostListener('document:keydown.escape')
   onEscapeCloseSearch() {
-    if (this.mobileSearchOpen) {
+    if (this.mobileSearchOpen || this.suggestionsOpen || this.mobileNavOpen) {
       this.closeMobileSearch();
+      this.closeMobileNav();
+    }
+  }
+
+  @HostListener('document:click', ['$event'])
+  onDocumentClick(ev: MouseEvent) {
+    const wrapEl = this.searchWrap()?.nativeElement;
+    const headerEl = this.headerBar()?.nativeElement;
+    const target = ev.target as Node | null;
+    if (!target) return;
+
+    if (this.suggestionsOpen && wrapEl && !wrapEl.contains(target)) {
+      this.suggestionsOpen = false;
+    }
+
+    // On mobile, tapping outside header closes open panels.
+    if (typeof window !== 'undefined' && window.innerWidth <= 767) {
+      if ((this.mobileNavOpen || this.mobileSearchOpen) && headerEl && !headerEl.contains(target)) {
+        this.closeMobileNav();
+        this.closeMobileSearch();
+      }
+    }
+  }
+
+  @HostListener('window:scroll')
+  onWindowScroll() {
+    if (typeof window !== 'undefined' && window.innerWidth <= 767) {
+      if (this.mobileNavOpen || this.mobileSearchOpen || this.suggestionsOpen) {
+        this.closeMobileNav();
+        this.closeMobileSearch();
+      }
     }
   }
 
@@ -423,27 +748,57 @@ export class CustomerLayoutComponent implements OnInit {
 
   onGlobalSearchInput(ev: Event) {
     this.globalSearchValue = (ev.target as HTMLInputElement)?.value ?? '';
+    this.searchInput$.next(this.globalSearchValue);
   }
 
   onGlobalSearchSubmit(ev: Event) {
     ev.preventDefault();
-    const q = this.globalSearchValue.trim();
-    this.router.navigate(['/products'], { queryParams: q ? { search: q } : {} });
-    this.closeMobileSearch();
+    const picked = this.suggestions[0];
+    if (picked?._id) {
+      this.router.navigate(['/products', picked._id]);
+      this.closeMobileSearch();
+    }
   }
 
   toggleMobileSearch() {
+    const nextOpen = !this.mobileSearchOpen;
     this.mobileSearchOpen = !this.mobileSearchOpen;
-    if (this.mobileSearchOpen) {
+    if (nextOpen) {
+      // Keep only one mobile panel open at a time (search or nav).
+      this.mobileNavOpen = false;
       queueMicrotask(() => this.globalSearchInput()?.nativeElement?.focus());
+      this.searchInput$.next(this.globalSearchValue);
+    } else {
+      this.suggestionsOpen = false;
     }
   }
 
   closeMobileSearch() {
     this.mobileSearchOpen = false;
+    this.suggestionsOpen = false;
+  }
+
+  toggleMobileNav() {
+    // When opening mobile menu, also close header search suggestions to reduce clutter.
+    this.mobileNavOpen = !this.mobileNavOpen;
+    if (this.mobileNavOpen) {
+      this.suggestionsOpen = false;
+      this.mobileSearchOpen = false;
+    }
+  }
+
+  closeMobileNav() {
+    this.mobileNavOpen = false;
   }
 
   logout() {
     this.store.dispatch(AuthActions.logout());
+  }
+
+  onGlobalSearchSuggestionClick(p: any) {
+    if (p?._id) {
+      this.router.navigate(['/products', p._id]);
+      this.closeMobileSearch();
+    }
   }
 }

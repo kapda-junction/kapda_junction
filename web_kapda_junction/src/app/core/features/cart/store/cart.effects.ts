@@ -6,6 +6,7 @@ import { catchError, debounceTime, map, switchMap, withLatestFrom } from 'rxjs/o
 import { CartActions } from './cart.actions';
 import { selectCartItems } from './cart.selectors';
 import { selectAuthState } from '../../auth/store/auth.selectors';
+import { AuthActions } from '../../auth/store/auth.actions';
 import { ApiService } from '../../../services/api.service';
 import { AppState } from '../../../store/app.state';
 
@@ -28,6 +29,10 @@ function fromApiItem(apiItem: { product: any; quantity: number; color?: string; 
   };
 }
 
+function authHeader(token?: string | null): Record<string, string> | undefined {
+  return token ? { Authorization: `Bearer ${token}` } : undefined;
+}
+
 export class CartEffects {
   private actions$ = inject(Actions);
   private store = inject(Store<AppState>);
@@ -38,8 +43,8 @@ export class CartEffects {
       ofType('@ngrx/store/init'),
       withLatestFrom(this.store.select(selectAuthState)),
       switchMap(([, auth]) => {
-        if (!auth?.isAuthenticated) return of({ type: 'NO_OP' });
-        return this.api.get<{ items: any[] }>('/cart').pipe(
+        if (!auth?.isAuthenticated || !auth?.token) return of({ type: 'NO_OP' });
+        return this.api.get<{ items: any[] }>('/cart', undefined, { headers: authHeader(auth.token) }).pipe(
           map((cart) => {
             const items = (cart?.items ?? []).map(fromApiItem).filter((i) => i.product);
             return CartActions.setItems({ items });
@@ -47,6 +52,21 @@ export class CartEffects {
           catchError(() => of({ type: 'NO_OP' }))
         );
       })
+    )
+  );
+
+  loadCartOnAuthSuccess$ = createEffect(() =>
+    this.actions$.pipe(
+      ofType(AuthActions.loginSuccess, AuthActions.registerSuccess),
+      switchMap(({ token }) =>
+        this.api.get<{ items: any[] }>('/cart', undefined, { headers: authHeader(token) }).pipe(
+          map((cart) => {
+            const items = (cart?.items ?? []).map(fromApiItem).filter((i) => i.product);
+            return CartActions.setItems({ items });
+          }),
+          catchError(() => of({ type: 'NO_OP' }))
+        )
+      )
     )
   );
 
@@ -65,9 +85,9 @@ export class CartEffects {
           this.store.select(selectAuthState)
         ),
         switchMap(([, items, auth]) => {
-          if (!auth?.isAuthenticated || !items) return of({ type: 'NO_OP' });
+          if (!auth?.isAuthenticated || !auth?.token || !items) return of({ type: 'NO_OP' });
           const apiItems = items.map(toApiItem);
-          return this.api.put('/cart', { items: apiItems }).pipe(
+          return this.api.put('/cart', { items: apiItems }, { headers: authHeader(auth.token) }).pipe(
             map((cart: any) => {
               const loaded = (cart?.items ?? []).map(fromApiItem).filter((i: any) => i.product);
               return CartActions.setItems({ items: loaded });

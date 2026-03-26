@@ -5,6 +5,7 @@ import { of } from 'rxjs';
 import { catchError, map, switchMap, tap } from 'rxjs/operators';
 import { AuthActions } from './auth.actions';
 import { ApiService } from '../../../services/api.service';
+import { CartActions } from '../../cart/store/cart.actions';
 
 export class AuthEffects {
   private actions$ = inject(Actions);
@@ -16,6 +17,9 @@ export class AuthEffects {
       ofType(AuthActions.loginRequest),
       switchMap(({ email, password }) =>
         this.api.post<{ user: any; token: string }>('/auth/login', { email, password }).pipe(
+          tap((res) => {
+            if (res?.token) localStorage.setItem('token', res.token);
+          }),
           map((res) => AuthActions.loginSuccess({ user: res.user, token: res.token })),
           catchError((err) => of(AuthActions.loginFailure({
             error: err.error?.message || err.statusText || 'Login failed'
@@ -30,6 +34,9 @@ export class AuthEffects {
       ofType(AuthActions.registerRequest),
       switchMap(({ name, email, password }) =>
         this.api.post<{ user: any; token: string }>('/auth/register', { name, email, password }).pipe(
+          tap((res) => {
+            if (res?.token) localStorage.setItem('token', res.token);
+          }),
           map((res) => AuthActions.registerSuccess({ user: res.user, token: res.token })),
           catchError((err) => of(AuthActions.registerFailure({
             error: err.error?.message || err.statusText || 'Registration failed'
@@ -56,9 +63,17 @@ export class AuthEffects {
         ofType(AuthActions.logout),
         tap(() => {
           localStorage.removeItem('token');
+          localStorage.removeItem('cart');
           this.router.navigate(['/']);
         })
       ),
     { dispatch: false }
+  );
+
+  logoutClearCart$ = createEffect(() =>
+    this.actions$.pipe(
+      ofType(AuthActions.logout),
+      map(() => CartActions.clearCart())
+    )
   );
 }
