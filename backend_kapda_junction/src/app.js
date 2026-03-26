@@ -36,8 +36,10 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 app.use(morgan('dev'));
-// Ensure DB connected (for Vercel serverless)
+// Ensure DB connected (for Vercel serverless).
+// Health check should stay lightweight so keep-alive pings don't repeatedly pay DB cost.
 app.use(async (req, res, next) => {
+  if (req.path === '/api/health') return next();
   try {
     await connectDB();
     next();
