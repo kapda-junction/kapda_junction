@@ -442,3 +442,25 @@ Answer the user: what fits their request from this catalog only?`
     next(err);
   }
 };
+
+
+exports.getSuggestions = async (req, res, next) => {
+  try {
+    const { q } = req.query;
+    if (!q || q.trim().length < 2) return res.json({ suggestions: [] });
+    const regex = new RegExp(escapeRegex(q.trim()), 'i');
+
+    const [products, categories] = await Promise.all([
+      Product.find({ name: regex, isActive: true }, 'name').limit(6).lean(),
+      Category.find({ name: regex, isActive: true }, 'name').limit(3).lean(),
+    ]);
+
+    const suggestions = [
+      ...products.map(p => ({ type: 'product', text: p.name, id: p._id })),
+      ...categories.map(c => ({ type: 'category', text: c.name, id: c._id })),
+    ];
+    res.json({ suggestions });
+  } catch (err) {
+    next(err);
+  }
+};

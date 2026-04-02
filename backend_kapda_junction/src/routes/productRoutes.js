@@ -6,6 +6,7 @@ const { protect, optionalAuth, authorize } = require('../middleware/auth');
 router.get('/', optionalAuth, productController.getAll);
 router.get('/landing', optionalAuth, productController.getLanding);
 router.get('/featured', productController.getFeatured);
+router.get('/suggestions', productController.getSuggestions);
 router.get('/:id', optionalAuth, productController.getOne);
 router.post('/', protect, authorize('admin'), productController.create);
 router.put('/:id', protect, authorize('admin'), productController.update);

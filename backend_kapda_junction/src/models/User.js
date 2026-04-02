@@ -8,7 +8,12 @@ const userSchema = new mongoose.Schema({
   password: { type: String, required: true },
   role: { type: String, enum: ['admin', 'customer'], default: 'customer' },
   phone: String,
-  address: { type: mongoose.Schema.Types.Mixed, default: {} }
+  address: { type: mongoose.Schema.Types.Mixed, default: {} },
+  fcmTokens: [{
+    token: String,
+    platform: { type: String, enum: ['android', 'ios', 'web'], default: 'android' },
+    updatedAt: { type: Date, default: Date.now }
+  }]
 }, { timestamps: true });
 
 userSchema.pre('save', async function (next) {

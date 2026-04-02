@@ -64,3 +64,18 @@ exports.getMe = async (req, res, next) => {
     next(err);
   }
 };
+
+exports.saveFcmToken = async (req, res, next) => {
+  try {
+    const { token, platform } = req.body;
+    if (!token) return res.status(400).json({ message: 'Token required' });
+    // Remove duplicate then push fresh
+    await User.findByIdAndUpdate(req.user.id, { $pull: { fcmTokens: { token } } });
+    await User.findByIdAndUpdate(req.user.id, {
+      $push: { fcmTokens: { token, platform: platform || 'android', updatedAt: new Date() } }
+    });
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+};
