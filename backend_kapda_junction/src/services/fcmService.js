@@ -11,21 +11,41 @@ function resolveServiceAccountPath() {
   return path.resolve(process.cwd(), configured);
 }
 
+function readServiceAccountFromEnv() {
+  const rawJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+  if (rawJson && rawJson.trim()) {
+    return JSON.parse(rawJson);
+  }
+
+  const base64 = process.env.FIREBASE_SERVICE_ACCOUNT_BASE64;
+  if (base64 && base64.trim()) {
+    const decoded = Buffer.from(base64, 'base64').toString('utf8');
+    return JSON.parse(decoded);
+  }
+
+  return null;
+}
+
 function ensureInitialized() {
   if (initialized || admin.apps.length) {
     initialized = true;
     return;
   }
 
-  const serviceAccountPath = resolveServiceAccountPath();
-  if (!serviceAccountPath) {
-    throw new Error('FIREBASE_SERVICE_ACCOUNT_PATH is not configured');
-  }
-  if (!fs.existsSync(serviceAccountPath)) {
-    throw new Error(`Firebase service account not found at ${serviceAccountPath}`);
+  let serviceAccount = readServiceAccountFromEnv();
+  if (!serviceAccount) {
+    const serviceAccountPath = resolveServiceAccountPath();
+    if (!serviceAccountPath) {
+      throw new Error(
+        'Firebase service account missing. Set FIREBASE_SERVICE_ACCOUNT_JSON (recommended) or FIREBASE_SERVICE_ACCOUNT_PATH.'
+      );
+    }
+    if (!fs.existsSync(serviceAccountPath)) {
+      throw new Error(`Firebase service account not found at ${serviceAccountPath}`);
+    }
+    serviceAccount = JSON.parse(fs.readFileSync(serviceAccountPath, 'utf8'));
   }
 
-  const serviceAccount = JSON.parse(fs.readFileSync(serviceAccountPath, 'utf8'));
   admin.initializeApp({
     credential: admin.credential.cert(serviceAccount)
   });
