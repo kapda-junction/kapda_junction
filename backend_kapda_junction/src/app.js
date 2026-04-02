@@ -19,6 +19,7 @@ const sizeRoutes = require('./routes/sizeRoutes');
 const bannerRoutes = require('./routes/bannerRoutes');
 const wishlistRoutes = require('./routes/wishlistRoutes');
 const activityRoutes = require('./routes/activityRoutes');
+const notificationRoutes = require('./routes/notificationRoutes');
 const shareController = require('./controllers/shareController');
 
 const app = express();
@@ -68,6 +69,7 @@ app.use('/api/sizes', sizeRoutes);
 app.use('/api/banners', bannerRoutes);
 app.use('/api/wishlist', wishlistRoutes);
 app.use('/api/activity', activityRoutes);
+app.use('/api/admin/notifications', notificationRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));

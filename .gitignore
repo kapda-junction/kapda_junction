@@ -29,3 +29,4 @@ npm-debug.log*
 # Temp & cache
 tmp_uploads/
 .cache/
+backend_kapda_junction/secrets/
