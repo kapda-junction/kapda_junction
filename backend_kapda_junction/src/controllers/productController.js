@@ -143,6 +143,7 @@ exports.getAll = async (req, res, next) => {
     }
     const [products, total] = await Promise.all([
       Product.find(filter)
+        .select('-embedding')
         .populate('category', 'name slug')
         .populate('subcategory', 'name slug')
         .skip(skip)
@@ -159,6 +160,7 @@ exports.getAll = async (req, res, next) => {
 exports.getOne = async (req, res, next) => {
   try {
     const product = await Product.findById(req.params.id)
+      .select('-embedding')
       .populate('category', 'name slug')
       .populate('subcategory', 'name slug');
     if (!product) return res.status(404).json({ message: 'Product not found' });

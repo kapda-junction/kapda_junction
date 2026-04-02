@@ -16,6 +16,10 @@ const productSchema = new mongoose.Schema({
   category: { type: mongoose.Schema.Types.ObjectId, ref: 'Category', required: true },
   subcategory: { type: mongoose.Schema.Types.ObjectId, ref: 'Category' },
   images: [{ type: String }],
+  colorImages: [{
+    color: { type: String, required: true },
+    images: [{ type: String }]
+  }],
   variants: [variantSchema],
   embedding: [Number],
   soldOut: { type: Boolean, default: false },
