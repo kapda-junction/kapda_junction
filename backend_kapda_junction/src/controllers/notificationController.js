@@ -1,48 +1,158 @@
 const User = require('../models/User');
+const Product = require('../models/Product');
 const { sendToTokens } = require('../services/fcmService');
 
-exports.sendUserNotification = async (req, res, next) => {
-  try {
-    const { userId, title, body, data, imageUrl } = req.body;
+function getProductShareUrl(productId) {
+  const base = process.env.BASE_URL || `http://localhost:${process.env.PORT || 3000}`;
+  return `${base.replace(/\/$/, '')}/share/product/${productId}`;
+}
 
-    if (!userId || !title || !body) {
+async function resolveAudienceTokens({ audienceType, userIds }) {
+  if (audienceType === 'broadcast') {
+    const users = await User.find({
+      role: 'customer',
+      'fcmTokens.0': { $exists: true }
+    }).select('_id email name fcmTokens');
+    const tokens = users.flatMap((u) => (u.fcmTokens || []).map((t) => t.token).filter(Boolean));
+    return { users, tokens };
+  }
+
+  if (audienceType === 'users') {
+    const safeIds = (userIds || []).map(String).filter(Boolean);
+    const users = await User.find({
+      _id: { $in: safeIds },
+      'fcmTokens.0': { $exists: true }
+    }).select('_id email name fcmTokens');
+    const tokens = users.flatMap((u) => (u.fcmTokens || []).map((t) => t.token).filter(Boolean));
+    return { users, tokens };
+  }
+
+  throw new Error('Unsupported audienceType');
+}
+
+exports.listAudience = async (req, res, next) => {
+  try {
+    const search = String(req.query.search || '').trim();
+    const limitRaw = Number(req.query.limit || 50);
+    const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(limitRaw, 1), 200) : 50;
+
+    const filter = {
+      role: 'customer',
+      ...(search
+        ? {
+            $or: [
+              { name: new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') },
+              { email: new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') }
+            ]
+          }
+        : {})
+    };
+
+    const users = await User.find(filter)
+      .select('name email role fcmTokens createdAt')
+      .sort('-createdAt')
+      .limit(limit)
+      .lean();
+
+    const out = users.map((u) => ({
+      id: String(u._id),
+      name: u.name || '',
+      email: u.email || '',
+      role: u.role || 'customer',
+      tokenCount: (u.fcmTokens || []).length,
+      hasToken: (u.fcmTokens || []).length > 0
+    }));
+
+    res.json({ users: out });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.sendNotification = async (req, res, next) => {
+  try {
+    const {
+      audienceType = 'broadcast',
+      userIds = [],
+      productId,
+      title,
+      body,
+      data,
+      imageUrl
+    } = req.body || {};
+
+    if (audienceType === 'users' && (!Array.isArray(userIds) || userIds.length === 0)) {
       return res.status(400).json({
-        message: 'userId, title and body are required'
+        message: 'For users audience, userIds must be a non-empty array'
       });
     }
 
-    const user = await User.findById(userId).select('name email fcmTokens');
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
+    let product = null;
+    if (productId) {
+      product = await Product.findById(productId).select('name price images').lean();
+      if (!product) return res.status(404).json({ message: 'Product not found' });
     }
 
-    const tokens = (user.fcmTokens || [])
-      .map((t) => t.token)
-      .filter(Boolean);
+    const finalTitle = String(title || '').trim() || (product ? 'New product just dropped!' : '');
+    const finalBody =
+      String(body || '').trim() ||
+      (product ? `${product.name} is now available. Tap to view.` : '');
+
+    if (!finalTitle || !finalBody) {
+      return res.status(400).json({ message: 'title and body are required' });
+    }
+
+    const { users, tokens } = await resolveAudienceTokens({
+      audienceType,
+      userIds
+    });
 
     if (!tokens.length) {
       return res.status(400).json({
-        message: 'No FCM tokens found for this user',
-        user: { id: user._id, email: user.email }
+        message: 'No FCM tokens found for selected audience'
       });
     }
 
-    const result = await sendToTokens(tokens, { title, body, data, imageUrl });
+    const mergedData = {
+      ...(data && typeof data === 'object' ? data : {}),
+      ...(product ? { productId: String(product._id), shareUrl: getProductShareUrl(product._id) } : {})
+    };
+
+    const result = await sendToTokens(tokens, {
+      title: finalTitle,
+      body: finalBody,
+      data: mergedData,
+      imageUrl: String(imageUrl || '').trim() || product?.images?.[0]
+    });
 
     if (result.invalidTokens.length) {
-      await User.findByIdAndUpdate(userId, {
+      await User.updateMany({}, {
         $pull: { fcmTokens: { token: { $in: result.invalidTokens } } }
       });
     }
 
     res.json({
       ok: true,
-      user: { id: user._id, email: user.email },
+      audienceType,
+      targetedUsers: users.length,
+      targetedTokens: tokens.length,
       sentCount: result.sentCount,
       failureCount: result.failureCount,
-      cleanedInvalidTokens: result.invalidTokens.length
+      cleanedInvalidTokens: result.invalidTokens.length,
+      product: product
+        ? { id: String(product._id), name: product.name, image: product.images?.[0] }
+        : null
     });
   } catch (err) {
     next(err);
   }
+};
+
+exports.sendUserNotification = async (req, res, next) => {
+  req.body = {
+    ...req.body,
+    audienceType: 'users',
+    userIds: req.body.userId ? [req.body.userId] : req.body.userIds
+  };
+  return exports.sendNotification(req, res, next);
 };
