@@ -75,16 +75,14 @@ exports.shareProduct = async (req, res, next) => {
     *{box-sizing:border-box;margin:0;padding:0}
     body{font-family:system-ui,-apple-system,sans-serif;background:#f1f5f9;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px}
     .card{max-width:380px;width:100%;background:#fff;border-radius:20px;overflow:hidden;box-shadow:0 8px 40px rgba(0,0,0,.13)}
-    .img-wrap{width:100%;aspect-ratio:1/1;background:#e2e8f0;overflow:hidden;position:relative}
-    .img-wrap img{width:100%;height:100%;display:block;object-fit:cover}
-    .no-img{display:flex;align-items:center;justify-content:center;width:100%;height:100%;color:#94a3b8;font-size:14px}
+    .img-wrap{width:100%;padding-bottom:100%;background:#e2e8f0;overflow:hidden;position:relative}
+    .img-wrap img{position:absolute;top:0;left:0;width:100%;height:100%;display:block;object-fit:cover}
+    .no-img{position:absolute;top:0;left:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:14px}
     .info{padding:20px}
     .brand{font-size:11px;font-weight:700;letter-spacing:1.2px;color:#f59e0b;text-transform:uppercase;margin-bottom:4px}
     .name{font-size:1.2rem;font-weight:800;color:#0f172a;line-height:1.3;margin-bottom:6px}
     .price{font-size:1.5rem;font-weight:800;color:#0f172a;margin-bottom:20px}
-    .redirect-bar{background:#0f172a;color:#fff;text-align:center;padding:12px 16px;font-size:13px;font-weight:600;display:none}
-    .redirect-bar.show{display:block}
-    .btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:14px;color:#fff;text-decoration:none;font-weight:700;font-size:15px;border-radius:12px;cursor:pointer;border:none;margin-bottom:10px}
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:14px;color:#fff;text-decoration:none;font-weight:700;font-size:15px;border-radius:12px;cursor:pointer;border:none;margin-bottom:10px}
     .btn-app{background:#0f172a}
     .btn-wa{background:#25D366}
     .btn:last-child{margin-bottom:0}
@@ -99,19 +97,18 @@ exports.shareProduct = async (req, res, next) => {
       }
       <div id="img-fallback" class="no-img"${imageUrl ? ' style="display:none"' : ''}>No image</div>
     </div>
-    <div id="redirect-bar" class="redirect-bar">Opening Kapda Junction app…</div>
-    <div class="info">
+<div class="info">
       <p class="brand">Kapda Junction</p>
       <h1 class="name">${title}</h1>
       <p class="price">${price}</p>
 
-      <button class="btn btn-app" onclick="openApp()">
+      <a id="btn-open-app" class="btn btn-app" href="${escapeHtml(androidIntent)}">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
           <rect x="5" y="2" width="14" height="20" rx="2"/>
           <circle cx="12" cy="17" r="1" fill="white" stroke="none"/>
         </svg>
         Open in Kapda Junction App
-      </button>
+      </a>
 
       <a class="btn btn-wa" href="${escapeHtml(waUrl)}">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="white">
@@ -123,10 +120,7 @@ exports.shareProduct = async (req, res, next) => {
   </div>
 
   <script>
-    var DEEP_LINK_ANDROID = '${androidIntent}';
-    var DEEP_LINK_IOS     = '${appDeepLink}';
-
-    // Fix broken image without inline onerror
+    // Image error fallback
     var productImg = document.getElementById('product-img');
     if (productImg) {
       productImg.addEventListener('error', function() {
@@ -134,28 +128,9 @@ exports.shareProduct = async (req, res, next) => {
         document.getElementById('img-fallback').style.display = 'flex';
       });
     }
-
-    var ua        = navigator.userAgent || '';
-    var isAndroid = /Android/i.test(ua);
-    var isIOS     = /iPhone|iPad|iPod/i.test(ua);
-
-    function openApp() {
-      document.getElementById('redirect-bar').classList.add('show');
-      // Android: Intent URL works in Chrome, WebView, WhatsApp in-app browser
-      // iOS: custom scheme direct navigation
-      if (isAndroid) {
-        window.location.href = DEEP_LINK_ANDROID;
-      } else if (isIOS) {
-        window.location.href = DEEP_LINK_IOS;
-      }
-      setTimeout(function() {
-        document.getElementById('redirect-bar').classList.remove('show');
-      }, 2000);
-    }
-
-    // Auto-attempt on mobile page load
-    if (isAndroid || isIOS) {
-      setTimeout(openApp, 800);
+    // On iOS, switch the button href to custom scheme
+    if (/iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+      document.getElementById('btn-open-app').href = '${appDeepLink}';
     }
   </script>
 </body>
