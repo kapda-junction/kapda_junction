@@ -155,7 +155,7 @@ exports.webhook = async (req, res) => {
     const raw = Buffer.isBuffer(body) ? body : JSON.stringify(body);
     const expected = crypto.createHmac('sha256', secret).update(raw).digest('hex');
     if (expected !== signature) { console.log(`[webhook] sig mismatch | expected=${expected.slice(0,10)}... got=${signature.slice(0,10)}...`); return res.status(400).send('Invalid signature'); }
-    const payload = typeof body === 'object' ? body : JSON.parse(body.toString());
+    const payload = JSON.parse(Buffer.isBuffer(body) ? body.toString() : JSON.stringify(body));
     const event = payload.event;
     console.log(`[webhook] event="${event}"`);
 
