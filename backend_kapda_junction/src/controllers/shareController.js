@@ -13,20 +13,26 @@ function escapeHtml(str) {
 }
 
 exports.shareProduct = async (req, res, next) => {
+  const reqId = req.params.id;
+  console.log(`[share] GET /share/product/${reqId}`);
   try {
-    const product = await Product.findById(req.params.id)
+    const product = await Product.findById(reqId)
       .populate('category', 'name')
       .lean();
 
     if (!product || !product.isActive) {
+      console.log(`[share] product not found or inactive: ${reqId}`);
       return res.status(404).send(`<!DOCTYPE html><html><head><title>Not Found</title></head>
         <body style="font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;">
           <p style="color:#64748b;">Product not found.</p>
         </body></html>`);
     }
 
+    console.log(`[share] product found: "${product.name}", images: ${JSON.stringify(product.images)}, isActive: ${product.isActive}`);
+
     const image    = product.images?.[0] || '';
     const imageUrl = image.startsWith('http') ? image : (image ? `${BASE_URL}${image}` : '');
+    console.log(`[share] BASE_URL="${BASE_URL}" | raw image="${image}" | resolved imageUrl="${imageUrl}"`);
     const title    = escapeHtml(product.name);
     const price    = `₹${product.price}`;
     const desc     = escapeHtml((product.description || `${price} - Shop at Kapda Junction`).slice(0, 160));
@@ -146,8 +152,10 @@ exports.shareProduct = async (req, res, next) => {
 </body>
 </html>`;
 
+    console.log(`[share] serving HTML for "${product.name}" | shareUrl="${sharePageUrl}" | deepLink="${appDeepLink}"`);
     res.type('html').send(html);
   } catch (err) {
+    console.error(`[share] ERROR for id=${reqId}:`, err);
     next(err);
   }
 };
