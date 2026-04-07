@@ -123,7 +123,8 @@ exports.shareProduct = async (req, res, next) => {
   </div>
 
   <script>
-    var DEEP_LINK = '${appDeepLink}';
+    var DEEP_LINK_ANDROID = '${androidIntent}';
+    var DEEP_LINK_IOS     = '${appDeepLink}';
 
     // Fix broken image without inline onerror
     var productImg = document.getElementById('product-img');
@@ -134,21 +135,28 @@ exports.shareProduct = async (req, res, next) => {
       });
     }
 
+    var ua        = navigator.userAgent || '';
+    var isAndroid = /Android/i.test(ua);
+    var isIOS     = /iPhone|iPad|iPod/i.test(ua);
+
     function openApp() {
       document.getElementById('redirect-bar').classList.add('show');
-      window.location.href = DEEP_LINK;
-      // Hide bar after 2s (app launched or not installed)
+      // Android: Intent URL works in Chrome, WebView, WhatsApp in-app browser
+      // iOS: custom scheme direct navigation
+      if (isAndroid) {
+        window.location.href = DEEP_LINK_ANDROID;
+      } else if (isIOS) {
+        window.location.href = DEEP_LINK_IOS;
+      }
       setTimeout(function() {
         document.getElementById('redirect-bar').classList.remove('show');
       }, 2000);
     }
 
-    // Auto-attempt on mobile page load (only Android/iOS, not desktop)
-    var ua = navigator.userAgent || '';
-    var isMobile = /Android|iPhone|iPad|iPod/i.test(ua);
-    if (isMobile) {
+    // Auto-attempt on mobile page load
+    if (isAndroid || isIOS) {
       setTimeout(openApp, 800);
-c    }
+    }
   </script>
 </body>
 </html>`;
