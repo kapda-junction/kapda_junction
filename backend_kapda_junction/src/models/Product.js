@@ -33,8 +33,22 @@ productSchema.virtual('totalStock').get(function () {
   return this.variants?.reduce((s, v) => s + (v.stock || 0), 0) ?? 0;
 });
 
+function genSku(name, color, size) {
+  const n = (name || '').replace(/\s+/g, '').slice(0, 3).toUpperCase();
+  const c = (color || '').replace(/\s+/g, '').slice(0, 2).toUpperCase();
+  const s = (size || '').replace(/\s+/g, '').slice(0, 2).toUpperCase();
+  const rand = Math.floor(1000 + Math.random() * 9000);
+  return `${n}${c}${s}-${rand}`;
+}
+
 productSchema.pre('save', function (next) {
   if (!this.slug) this.slug = this.name.toLowerCase().replace(/\s+/g, '-').concat('-', Date.now());
+  // Auto-generate SKU for variants that don't have one
+  if (this.variants) {
+    this.variants.forEach(v => {
+      if (!v.sku) v.sku = genSku(this.name, v.color, v.size);
+    });
+  }
   const total = this.variants?.reduce((s, v) => s + (v.stock || 0), 0) ?? 0;
   this.soldOut = total === 0;
   next();

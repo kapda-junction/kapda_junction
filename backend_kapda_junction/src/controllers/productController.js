@@ -444,6 +444,56 @@ Answer the user: what fits their request from this catalog only?`
 };
 
 
+/** GET /api/products/inventory?filter=all|low|out
+ *  Returns all products with variant stock details for admin inventory management
+ */
+exports.getInventory = async (req, res, next) => {
+  try {
+    const { filter = 'all' } = req.query;
+    const products = await Product.find({})
+      .select('name images variants soldOut isActive')
+      .populate('category', 'name')
+      .lean();
+
+    const LOW_STOCK_THRESHOLD = 5;
+
+    const enriched = products.map(p => {
+      const totalStock = p.variants.reduce((s, v) => s + (v.stock || 0), 0);
+      const outOfStockVariants = p.variants.filter(v => (v.stock || 0) === 0);
+      const lowStockVariants = p.variants.filter(v => (v.stock || 0) > 0 && v.stock <= LOW_STOCK_THRESHOLD);
+      return { ...p, totalStock, outOfStockVariants: outOfStockVariants.length, lowStockVariants: lowStockVariants.length };
+    });
+
+    let result = enriched;
+    if (filter === 'out') result = enriched.filter(p => p.totalStock === 0);
+    else if (filter === 'low') result = enriched.filter(p => p.totalStock > 0 && p.totalStock <= LOW_STOCK_THRESHOLD * p.variants.length);
+
+    res.json({ products: result, total: result.length });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/** PATCH /api/products/:id/stock
+ *  Body: { variantId, stock }
+ *  Updates a single variant's stock. Auto-saves soldOut on product.
+ */
+exports.updateStock = async (req, res, next) => {
+  try {
+    const { variantId, stock } = req.body;
+    if (stock === undefined || stock < 0) return res.status(400).json({ message: 'stock must be >= 0' });
+    const product = await Product.findById(req.params.id);
+    if (!product) return res.status(404).json({ message: 'Product not found' });
+    const variant = product.variants.id(variantId);
+    if (!variant) return res.status(404).json({ message: 'Variant not found' });
+    variant.stock = Number(stock);
+    await product.save(); // pre-save recalculates soldOut
+    res.json({ message: 'Stock updated', variant, soldOut: product.soldOut, totalStock: product.totalStock });
+  } catch (err) {
+    next(err);
+  }
+};
+
 exports.getSuggestions = async (req, res, next) => {
   try {
     const { q } = req.query;

@@ -166,8 +166,10 @@ exports.webhook = async (req, res) => {
       const ourOrder = await Order.findOne({ razorpayOrderId: orderId }).populate('items.product');
       if (ourOrder && ourOrder.paymentStatus !== 'paid') {
         ourOrder.paymentStatus = 'paid';
+        ourOrder.status = 'confirmed';
         ourOrder.razorpayPaymentId = payment.id;
         await ourOrder.save();
+        console.log(`[webhook] order ${ourOrder._id} → confirmed`);
 
         // Post-payment stock check: if stock insufficient, auto-refund
         const stockOk = await validateStock(ourOrder.items);
@@ -202,7 +204,11 @@ exports.webhook = async (req, res) => {
       const ourOrder = await Order.findOne({ razorpayOrderId: orderId });
       if (ourOrder && ourOrder.paymentStatus === 'pending') {
         ourOrder.paymentStatus = 'failed';
+        ourOrder.status = 'cancelled';
+        ourOrder.cancelReason = 'Payment failed';
+        ourOrder.cancelledAt = new Date();
         await ourOrder.save();
+        console.log(`[webhook] order ${ourOrder._id} → cancelled (payment failed)`);
       }
     }
 
