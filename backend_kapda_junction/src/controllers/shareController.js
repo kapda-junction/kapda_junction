@@ -37,7 +37,8 @@ exports.shareProduct = async (req, res, next) => {
     const price    = `₹${product.price}`;
     const desc     = escapeHtml((product.description || `${price} - Shop at Kapda Junction`).slice(0, 160));
     const sharePageUrl = `${BASE_URL}/share/product/${product._id}`;
-    const appDeepLink  = `kapdajunction:///share/product/${product._id}`;
+    const appDeepLink     = `kapdajunction:///share/product/${product._id}`;
+    const androidIntent   = `intent://share/product/${product._id}#Intent;scheme=kapdajunction;package=com.kadadjunction.flutter_kapda_junction;end`;
 
     const waMsg = encodeURIComponent(
       `Hi! I'm interested in buying *${product.name}* (${price}). Is it available?\n\n🔗 ${sharePageUrl}`
@@ -147,7 +148,7 @@ exports.shareProduct = async (req, res, next) => {
     var isMobile = /Android|iPhone|iPad|iPod/i.test(ua);
     if (isMobile) {
       setTimeout(openApp, 800);
-    }
+c    }
   </script>
 </body>
 </html>`;
