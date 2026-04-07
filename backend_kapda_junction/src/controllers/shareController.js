@@ -75,9 +75,9 @@ exports.shareProduct = async (req, res, next) => {
     *{box-sizing:border-box;margin:0;padding:0}
     body{font-family:system-ui,-apple-system,sans-serif;background:#f1f5f9;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px}
     .card{max-width:380px;width:100%;background:#fff;border-radius:20px;overflow:hidden;box-shadow:0 8px 40px rgba(0,0,0,.13)}
-    .img-wrap{width:100%;padding-bottom:100%;background:#e2e8f0;overflow:hidden;position:relative}
-    .img-wrap img{position:absolute;top:0;left:0;width:100%;height:100%;display:block;object-fit:cover}
-    .no-img{position:absolute;top:0;left:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:14px}
+    .img-wrap{width:100%;height:320px;background:#e2e8f0;overflow:hidden}
+    .img-wrap img{width:100%;height:100%;display:block;object-fit:cover}
+    .no-img{width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:14px}
     .info{padding:20px}
     .brand{font-size:11px;font-weight:700;letter-spacing:1.2px;color:#f59e0b;text-transform:uppercase;margin-bottom:4px}
     .name{font-size:1.2rem;font-weight:800;color:#0f172a;line-height:1.3;margin-bottom:6px}
