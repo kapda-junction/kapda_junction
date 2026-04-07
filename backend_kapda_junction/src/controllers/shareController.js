@@ -92,7 +92,7 @@ exports.shareProduct = async (req, res, next) => {
   <div class="card">
     <div class="img-wrap">
       ${imageUrl
-        ? `<img id="product-img" src="${escapeHtml(imageUrl)}" alt="${title}" loading="eager">`
+        ? `<img src="${escapeHtml(imageUrl)}" alt="${title}" loading="eager" onerror="this.style.display='none';document.getElementById('img-fallback').style.display='flex'">`
         : ''
       }
       <div id="img-fallback" class="no-img"${imageUrl ? ' style="display:none"' : ''}>No image</div>
@@ -120,14 +120,6 @@ exports.shareProduct = async (req, res, next) => {
   </div>
 
   <script>
-    // Image error fallback
-    var productImg = document.getElementById('product-img');
-    if (productImg) {
-      productImg.addEventListener('error', function() {
-        productImg.style.display = 'none';
-        document.getElementById('img-fallback').style.display = 'flex';
-      });
-    }
     // On iOS, switch the button href to custom scheme
     if (/iPhone|iPad|iPod/i.test(navigator.userAgent)) {
       document.getElementById('btn-open-app').href = '${appDeepLink}';
