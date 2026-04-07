@@ -147,15 +147,17 @@ exports.createPayment = async (req, res, next) => {
 exports.webhook = async (req, res) => {
   try {
     const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
-    if (!secret) return res.status(200).send('OK');
+    console.log(`[webhook] hit | secret set: ${!!secret} | sig header: ${!!req.headers['x-razorpay-signature']}`);
+    if (!secret) { console.log('[webhook] no secret — skipping'); return res.status(200).send('OK'); }
     const signature = req.headers['x-razorpay-signature'];
-    if (!signature) return res.status(400).send('Bad Request');
+    if (!signature) { console.log('[webhook] no signature header'); return res.status(400).send('Bad Request'); }
     const body = req.body;
     const raw = Buffer.isBuffer(body) ? body : JSON.stringify(body);
     const expected = crypto.createHmac('sha256', secret).update(raw).digest('hex');
-    if (expected !== signature) return res.status(400).send('Invalid signature');
+    if (expected !== signature) { console.log(`[webhook] sig mismatch | expected=${expected.slice(0,10)}... got=${signature.slice(0,10)}...`); return res.status(400).send('Invalid signature'); }
     const payload = typeof body === 'object' ? body : JSON.parse(body.toString());
     const event = payload.event;
+    console.log(`[webhook] event="${event}"`);
 
     // payment.captured - payment success; also check stock (race condition) → auto-refund if insufficient
     if (event === 'payment.captured') {
