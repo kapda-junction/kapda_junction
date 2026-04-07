@@ -153,6 +153,9 @@ exports.shareProduct = async (req, res, next) => {
 </html>`;
 
     console.log(`[share] serving HTML for "${product.name}" | shareUrl="${sharePageUrl}" | deepLink="${appDeepLink}"`);
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
     res.type('html').send(html);
   } catch (err) {
     console.error(`[share] ERROR for id=${reqId}:`, err);
