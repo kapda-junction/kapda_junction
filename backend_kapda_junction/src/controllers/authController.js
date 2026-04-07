@@ -1,4 +1,5 @@
 const User = require('../models/User');
+const DeviceToken = require('../models/DeviceToken');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const mongoose = require('mongoose');
@@ -75,6 +76,8 @@ exports.saveFcmToken = async (req, res, next) => {
     await User.findByIdAndUpdate(req.user.id, {
       $push: { fcmTokens: { token, platform: platform || 'android', updatedAt: new Date() } }
     });
+    // Token now belongs to a logged-in user — remove from anonymous device pool
+    await DeviceToken.deleteOne({ token });
     res.json({ ok: true });
   } catch (err) {
     next(err);

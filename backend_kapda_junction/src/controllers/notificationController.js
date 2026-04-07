@@ -1,4 +1,5 @@
 const User = require('../models/User');
+const DeviceToken = require('../models/DeviceToken');
 const Product = require('../models/Product');
 const { sendToTokens } = require('../services/fcmService');
 
@@ -13,7 +14,15 @@ async function resolveAudienceTokens({ audienceType, userIds }) {
       role: 'customer',
       'fcmTokens.0': { $exists: true }
     }).select('_id email name fcmTokens');
-    const tokens = users.flatMap((u) => (u.fcmTokens || []).map((t) => t.token).filter(Boolean));
+    const userTokens = users.flatMap((u) => (u.fcmTokens || []).map((t) => t.token).filter(Boolean));
+
+    // Also include anonymous (non-logged-in) device tokens
+    const anonDocs = await DeviceToken.find().select('token').lean();
+    const anonTokens = anonDocs.map((d) => d.token).filter(Boolean);
+
+    // Deduplicate (a token that logged in will have been removed from DeviceToken,
+    // but guard anyway)
+    const tokens = [...new Set([...userTokens, ...anonTokens])];
     return { users, tokens };
   }
 
@@ -126,9 +135,10 @@ exports.sendNotification = async (req, res, next) => {
     });
 
     if (result.invalidTokens.length) {
-      await User.updateMany({}, {
-        $pull: { fcmTokens: { token: { $in: result.invalidTokens } } }
-      });
+      await Promise.all([
+        User.updateMany({}, { $pull: { fcmTokens: { token: { $in: result.invalidTokens } } } }),
+        DeviceToken.deleteMany({ token: { $in: result.invalidTokens } })
+      ]);
     }
 
     res.json({
