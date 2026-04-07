@@ -66,20 +66,17 @@ exports.shareProduct = async (req, res, next) => {
 
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
-    body{font-family:system-ui,-apple-system,sans-serif;background:#f1f5f9;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:16px}
+    body{font-family:system-ui,-apple-system,sans-serif;background:#f1f5f9;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px}
     .card{max-width:380px;width:100%;background:#fff;border-radius:20px;overflow:hidden;box-shadow:0 8px 40px rgba(0,0,0,.13)}
-    .img-wrap{width:100%;background:#e2e8f0;position:relative;overflow:hidden}
-    .img-wrap img{width:100%;display:block;object-fit:cover}
-    .no-img{display:flex;align-items:center;justify-content:center;height:240px;color:#94a3b8;font-size:14px}
+    .img-wrap{width:100%;aspect-ratio:1/1;background:#e2e8f0;overflow:hidden;position:relative}
+    .img-wrap img{width:100%;height:100%;display:block;object-fit:cover}
+    .no-img{display:flex;align-items:center;justify-content:center;width:100%;height:100%;color:#94a3b8;font-size:14px}
     .info{padding:20px}
     .brand{font-size:11px;font-weight:700;letter-spacing:1.2px;color:#f59e0b;text-transform:uppercase;margin-bottom:4px}
     .name{font-size:1.2rem;font-weight:800;color:#0f172a;line-height:1.3;margin-bottom:6px}
     .price{font-size:1.5rem;font-weight:800;color:#0f172a;margin-bottom:20px}
-
-    /* Redirect banner — shows while JS tries to open the app */
     .redirect-bar{background:#0f172a;color:#fff;text-align:center;padding:12px 16px;font-size:13px;font-weight:600;display:none}
     .redirect-bar.show{display:block}
-
     .btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:14px;color:#fff;text-decoration:none;font-weight:700;font-size:15px;border-radius:12px;cursor:pointer;border:none;margin-bottom:10px}
     .btn-app{background:#0f172a}
     .btn-wa{background:#25D366}
@@ -90,9 +87,10 @@ exports.shareProduct = async (req, res, next) => {
   <div class="card">
     <div class="img-wrap">
       ${imageUrl
-        ? `<img src="${escapeHtml(imageUrl)}" alt="${title}" loading="eager" onerror="this.parentElement.innerHTML='<div class=\\"no-img\\">No image</div>'">`
-        : '<div class="no-img">No image</div>'
+        ? `<img id="product-img" src="${escapeHtml(imageUrl)}" alt="${title}" loading="eager">`
+        : ''
       }
+      <div id="img-fallback" class="no-img"${imageUrl ? ' style="display:none"' : ''}>No image</div>
     </div>
     <div id="redirect-bar" class="redirect-bar">Opening Kapda Junction app…</div>
     <div class="info">
@@ -120,29 +118,28 @@ exports.shareProduct = async (req, res, next) => {
   <script>
     var DEEP_LINK = '${appDeepLink}';
 
+    // Fix broken image without inline onerror
+    var productImg = document.getElementById('product-img');
+    if (productImg) {
+      productImg.addEventListener('error', function() {
+        productImg.style.display = 'none';
+        document.getElementById('img-fallback').style.display = 'flex';
+      });
+    }
+
     function openApp() {
       document.getElementById('redirect-bar').classList.add('show');
-      // Attempt to open the app via custom URI scheme.
-      // On Android this works even inside WhatsApp/Instagram in-app browsers.
-      var iframe = document.createElement('iframe');
-      iframe.style.display = 'none';
-      iframe.src = DEEP_LINK;
-      document.body.appendChild(iframe);
-      // Fallback: direct location change after short delay
-      setTimeout(function() {
-        window.location = DEEP_LINK;
-      }, 300);
-      // If still on page after 1.8s the app is not installed — hide bar
+      window.location.href = DEEP_LINK;
+      // Hide bar after 2s (app launched or not installed)
       setTimeout(function() {
         document.getElementById('redirect-bar').classList.remove('show');
-      }, 1800);
+      }, 2000);
     }
 
     // Auto-attempt on mobile page load (only Android/iOS, not desktop)
     var ua = navigator.userAgent || '';
     var isMobile = /Android|iPhone|iPad|iPod/i.test(ua);
     if (isMobile) {
-      // Small delay so the page renders first (image loads, OG bots can read)
       setTimeout(openApp, 800);
     }
   </script>
