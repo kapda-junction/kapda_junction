@@ -132,6 +132,8 @@ exports.shareProduct = async (req, res, next) => {
     res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
     res.set('Pragma', 'no-cache');
     res.set('Expires', '0');
+    // Override helmet's default CSP — share page needs external images + inline scripts
+    res.set('Content-Security-Policy', "default-src 'self'; img-src * data: blob:; script-src 'self' 'unsafe-inline'; script-src-attr 'unsafe-inline'; style-src 'self' 'unsafe-inline';");
     res.type('html').send(html);
   } catch (err) {
     console.error(`[share] ERROR for id=${reqId}:`, err);
