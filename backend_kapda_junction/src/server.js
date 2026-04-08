@@ -7,7 +7,7 @@ const PORT = process.env.PORT || 3000;
 
 connectDB()
   .then(() => {
-    app.listen(PORT, () => {
+    app.listen(PORT, '0.0.0.0', () => {
       console.log(`🚀 Kapda Junction API running on port ${PORT}`);
 
       // Optional local keep-alive.
