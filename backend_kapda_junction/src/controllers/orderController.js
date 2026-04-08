@@ -1,11 +1,30 @@
 const crypto = require('crypto');
 const Order = require('../models/Order');
 const Product = require('../models/Product');
+const Coupon = require('../models/Coupon');
 const Razorpay = require('razorpay');
+const storePolicy = require('../services/storePolicyService');
+const { buildPublicTrackingUrl } = require('../utils/trackingUrl');
+const {
+  buildCartLinesFromRequestItems,
+  validateAndApply,
+  orderItemsForDb
+} = require('../services/couponService');
+const { notifyOrderPush } = require('../services/customerPushService');
 
 const rzp = process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET
   ? new Razorpay({ key_id: process.env.RAZORPAY_KEY_ID, key_secret: process.env.RAZORPAY_KEY_SECRET })
   : null;
+
+function orderToClient(doc) {
+  const o = doc.toObject ? doc.toObject() : { ...doc };
+  o.trackingUrl = buildPublicTrackingUrl(
+    o.shippingCarrier,
+    o.shippingAwb,
+    o.shippingTrackingUrlOverride
+  );
+  return o;
+}
 
 /** Validate stock for order items. Returns { ok: boolean, message?: string } */
 async function validateStock(items) {
@@ -62,11 +81,142 @@ async function restoreStock(items) {
   }
 }
 
+/**
+ * Confirm DB order after Razorpay payment is captured. Idempotent for duplicate webhook / verify calls.
+ * @param {string} mongoOrderId
+ * @param {{ id: string, order_id: string, amount: number|string, status: string }} payment
+ * @param {{ signature?: string }} opts
+ */
+async function finalizeCapturedPayment(mongoOrderId, payment, opts = {}) {
+  if (!payment?.id || !payment?.order_id) {
+    return { ok: false, statusCode: 400, error: 'Invalid payment' };
+  }
+  if (payment.status !== 'captured') {
+    return { ok: false, statusCode: 400, error: 'Payment not captured' };
+  }
+  const expectedAmount = Math.round(Number(payment.amount));
+  if (!Number.isFinite(expectedAmount)) {
+    return { ok: false, statusCode: 400, error: 'Invalid payment amount' };
+  }
+
+  const orderBefore = await Order.findById(mongoOrderId).populate('items.product');
+  if (!orderBefore) {
+    return { ok: false, statusCode: 404, error: 'Order not found' };
+  }
+
+  if (orderBefore.razorpayOrderId !== payment.order_id) {
+    return { ok: false, statusCode: 400, error: 'Razorpay order mismatch' };
+  }
+
+  const orderPaise = Math.round((orderBefore.totalAmount || 0) * 100);
+  if (expectedAmount !== orderPaise) {
+    return { ok: false, statusCode: 400, error: 'Amount mismatch' };
+  }
+
+  if (orderBefore.paymentStatus === 'paid' && orderBefore.razorpayPaymentId === payment.id) {
+    const populated = await Order.findById(mongoOrderId)
+      .populate('user', 'name email')
+      .populate('items.product', 'name price images');
+    return { ok: true, idempotent: true, order: populated };
+  }
+
+  if (orderBefore.paymentStatus === 'paid' && orderBefore.razorpayPaymentId !== payment.id) {
+    return { ok: false, statusCode: 409, error: 'Order already paid with a different payment' };
+  }
+
+  if (orderBefore.paymentStatus !== 'pending') {
+    return { ok: false, statusCode: 400, error: 'Order cannot be confirmed' };
+  }
+
+  const update = {
+    paymentStatus: 'paid',
+    status: 'confirmed',
+    razorpayPaymentId: payment.id
+  };
+  if (opts.signature) {
+    update.razorpaySignature = opts.signature;
+  }
+
+  const updated = await Order.findOneAndUpdate(
+    { _id: mongoOrderId, paymentStatus: 'pending', razorpayOrderId: payment.order_id },
+    { $set: update },
+    { new: true }
+  ).populate('items.product');
+
+  if (!updated) {
+    const again = await Order.findById(mongoOrderId);
+    if (again && again.paymentStatus === 'paid' && again.razorpayPaymentId === payment.id) {
+      const populated = await Order.findById(mongoOrderId)
+        .populate('user', 'name email')
+        .populate('items.product', 'name price images');
+      return { ok: true, idempotent: true, order: populated };
+    }
+    return { ok: false, statusCode: 409, error: 'Could not confirm order — try again' };
+  }
+
+  const captureJustConfirmed = true;
+
+  const stockOk = await validateStock(updated.items);
+  if (!stockOk.ok && rzp) {
+    try {
+      const amountPaise = Math.round((updated.totalAmount || 0) * 100);
+      const refundResult = await rzp.payments.refund(payment.id, { amount: amountPaise });
+      const refundPaise = refundResult.amount != null ? Number(refundResult.amount) : amountPaise;
+      updated.paymentStatus = 'refunded';
+      updated.status = 'cancelled';
+      updated.refundStatus = 'pending';
+      updated.razorpayRefundId = refundResult.id;
+      updated.refundAmount = refundPaise / 100;
+      updated.cancelReason = stockOk.message || 'Insufficient stock - auto refund';
+      updated.cancelledAt = new Date();
+      await updated.save();
+    } catch (refundErr) {
+      updated.cancelReason = stockOk.message || 'Insufficient stock - refund pending';
+      updated.refundStatus = 'failed';
+      updated.refundLastError = (refundErr.error && refundErr.error.description) || refundErr.message || 'Auto-refund failed';
+      await updated.save();
+    }
+  } else if (stockOk.ok) {
+    await reduceStock(updated.items);
+    await Order.updateOne({ _id: mongoOrderId }, { $set: { stockDeducted: true } });
+    if (updated.coupon) {
+      await Coupon.findByIdAndUpdate(updated.coupon, { $inc: { usedCount: 1 } });
+    }
+  }
+
+  const populated = await Order.findById(mongoOrderId)
+    .populate('user', 'name email')
+    .populate('items.product', 'name price images');
+
+  if (captureJustConfirmed) {
+    const userId = populated.user?._id || populated.user;
+    if (userId) {
+      const oid = populated._id;
+      if (populated.paymentStatus === 'paid' && populated.status === 'confirmed') {
+        notifyOrderPush(userId, oid, 'Order confirmed', 'Payment received — we\'re preparing your order.')
+          .catch(() => {});
+      } else if (populated.paymentStatus === 'refunded') {
+        const stockIssue = (populated.cancelReason || '').toLowerCase().includes('stock');
+        notifyOrderPush(
+          userId,
+          oid,
+          'Refund processing',
+          stockIssue
+            ? 'We couldn\'t fulfil your order. Your refund is on the way.'
+            : 'Your payment has been refunded.'
+        ).catch(() => {});
+      }
+    }
+  }
+
+  return { ok: true, order: populated };
+}
+
 exports.getAll = async (req, res, next) => {
   try {
     const filter = req.user.role === 'admin' ? {} : { user: req.user.id };
     const orders = await Order.find(filter).populate('user', 'name email').populate('items.product', 'name price images').sort('-createdAt');
-    res.json(orders);
+    res.json(orders.map(orderToClient));
   } catch (err) {
     next(err);
   }
@@ -79,7 +229,7 @@ exports.getOne = async (req, res, next) => {
     if (req.user.role !== 'admin' && order.user._id.toString() !== req.user.id) {
       return res.status(403).json({ message: 'Not authorized' });
     }
-    res.json(order);
+    res.json(orderToClient(order));
   } catch (err) {
     next(err);
   }
@@ -96,10 +246,103 @@ exports.create = async (req, res, next) => {
 
 exports.updateStatus = async (req, res, next) => {
   try {
-    const order = await Order.findByIdAndUpdate(req.params.id, { status: req.body.status }, { new: true });
+    const order = await Order.findById(req.params.id);
     if (!order) return res.status(404).json({ message: 'Order not found' });
-    res.json(order);
+    const prevStatus = order.status;
+    const {
+      status,
+      shippingAwb,
+      shippingCarrier,
+      shippingTrackingUrlOverride,
+      refundNote
+    } = req.body || {};
+    if (status != null) order.status = status;
+    if (shippingAwb !== undefined) order.shippingAwb = String(shippingAwb).trim();
+    if (shippingCarrier !== undefined) {
+      order.shippingCarrier = String(shippingCarrier).trim() || 'India Post';
+    }
+    if (shippingTrackingUrlOverride !== undefined) {
+      order.shippingTrackingUrlOverride = String(shippingTrackingUrlOverride).trim();
+    }
+    if (refundNote !== undefined && req.user.role === 'admin') {
+      order.refundNote = String(refundNote).trim().slice(0, 500);
+    }
+    if (status === 'shipped' && !order.shippedAt) order.shippedAt = new Date();
+    await order.save();
+    const populated = await Order.findById(order._id)
+      .populate('user', 'name email')
+      .populate('items.product', 'name price images');
+
+    const uid = order.user;
+    if (uid && status != null && order.status !== prevStatus) {
+      const oid = order._id;
+      if (order.status === 'confirmed') {
+        notifyOrderPush(uid, oid, 'Order confirmed', 'Your order is confirmed — we\'ll ship it soon.')
+          .catch(() => {});
+      } else if (order.status === 'shipped') {
+        const awb = (order.shippingAwb || '').trim();
+        const body = awb.length
+          ? `On the way — tracking: ${awb}. Tap to open your order.`
+          : 'Your order has shipped. Tap to track in the app.';
+        notifyOrderPush(uid, oid, 'Shipped', body).catch(() => {});
+      } else if (order.status === 'delivered') {
+        notifyOrderPush(uid, oid, 'Delivered', 'Your order was delivered. We hope you love it!')
+          .catch(() => {});
+      } else if (order.status === 'cancelled') {
+        notifyOrderPush(
+          uid,
+          oid,
+          'Order cancelled',
+          (order.cancelReason || 'Your order was cancelled.').slice(0, 200)
+        ).catch(() => {});
+      }
+    }
+
+    res.json(orderToClient(populated));
   } catch (err) {
+    next(err);
+  }
+};
+
+/** Admin: retry Razorpay refund when previous attempt failed */
+exports.retryRefund = async (req, res, next) => {
+  try {
+    if (!rzp) return res.status(503).json({ message: 'Payment service not configured' });
+    const order = await Order.findById(req.params.id);
+    if (!order) return res.status(404).json({ message: 'Order not found' });
+    if (order.paymentStatus !== 'paid' || !order.razorpayPaymentId) {
+      return res.status(400).json({ message: 'Order is not in a refundable paid state' });
+    }
+    if (order.refundStatus !== 'failed') {
+      return res.status(400).json({ message: 'Retry is only for failed refunds' });
+    }
+    const amountPaise = Math.round((order.totalAmount || 0) * 100);
+    const refund = await rzp.payments.refund(order.razorpayPaymentId, { amount: amountPaise });
+    order.refundStatus = 'pending';
+    order.razorpayRefundId = refund.id;
+    order.refundAmount = order.totalAmount;
+    order.refundLastError = '';
+    await order.save();
+    notifyOrderPush(
+      order.user,
+      order._id,
+      'Refund retry',
+      'We\'ve re-initiated your refund. It may take a few days to show in your account.'
+    ).catch(() => {});
+    res.json({
+      message: 'Refund re-initiated',
+      order: orderToClient(order)
+    });
+  } catch (err) {
+    try {
+      const order = await Order.findById(req.params.id);
+      if (order) {
+        order.refundLastError = (err.error && err.error.description) || err.message || 'Refund error';
+        order.refundStatus = 'failed';
+        await order.save();
+      }
+    } catch (_) {}
+    if (err.error?.description) return res.status(400).json({ message: err.error.description });
     next(err);
   }
 };
@@ -108,15 +351,28 @@ exports.updateStatus = async (req, res, next) => {
 exports.createPayment = async (req, res, next) => {
   try {
     if (!rzp) return res.status(503).json({ message: 'Payment service not configured' });
-    const { items, totalAmount, shippingAddress } = req.body;
-    if (!items?.length || !totalAmount || !shippingAddress) {
-      return res.status(400).json({ message: 'items, totalAmount and shippingAddress required' });
+    const { items, shippingAddress, couponCode } = req.body;
+    if (!items?.length || !shippingAddress) {
+      return res.status(400).json({ message: 'items and shippingAddress required' });
     }
-    const stockOk = await validateStock(items);
+    const built = await buildCartLinesFromRequestItems(items);
+    if (built.error) return res.status(400).json({ message: built.error });
+
+    const applied = await validateAndApply(req.user.id, built.lines, built.subtotal, couponCode);
+    if (applied.error) return res.status(400).json({ message: applied.error });
+
+    const orderItems = orderItemsForDb(built.lines);
+    const stockOk = await validateStock(orderItems);
     if (!stockOk.ok) return res.status(400).json({ message: stockOk.message });
+
+    const totalAmount = applied.total;
     const order = await Order.create({
       user: req.user.id,
-      items,
+      items: orderItems,
+      subtotal: built.subtotal,
+      discountAmount: applied.discountAmount || 0,
+      coupon: applied.coupon?._id || null,
+      couponCode: applied.coupon ? applied.coupon.code : '',
       totalAmount,
       shippingAddress,
       paymentMethod: 'razorpay',
@@ -124,20 +380,73 @@ exports.createPayment = async (req, res, next) => {
       status: 'pending'
     });
     const amountPaise = Math.round(totalAmount * 100);
-    const rzpOrder = await rzp.orders.create({
-      amount: amountPaise,
-      currency: 'INR',
-      receipt: order._id.toString()
+    try {
+      const rzpOrder = await rzp.orders.create({
+        amount: amountPaise,
+        currency: 'INR',
+        receipt: order._id.toString()
+      });
+      order.razorpayOrderId = rzpOrder.id;
+      await order.save();
+      res.status(201).json({
+        orderId: order._id,
+        razorpayOrderId: rzpOrder.id,
+        amount: amountPaise,
+        currency: 'INR',
+        key: process.env.RAZORPAY_KEY_ID
+      });
+    } catch (gwErr) {
+      order.status = 'cancelled';
+      order.paymentStatus = 'failed';
+      order.cancelReason = 'Could not initialize payment with gateway';
+      await order.save();
+      if (gwErr.error?.description) return res.status(503).json({ message: gwErr.error.description });
+      return res.status(503).json({ message: 'Payment gateway error' });
+    }
+  } catch (err) {
+    next(err);
+  }
+};
+
+/** App calls after Razorpay checkout success — verifies signature + payment with Razorpay, then confirms order (idempotent). */
+exports.verifyPayment = async (req, res, next) => {
+  try {
+    if (!rzp) return res.status(503).json({ message: 'Payment service not configured' });
+    const { orderId, razorpayOrderId, razorpayPaymentId, razorpaySignature } = req.body || {};
+    if (!orderId || !razorpayOrderId || !razorpayPaymentId || !razorpaySignature) {
+      return res.status(400).json({
+        message: 'orderId, razorpayOrderId, razorpayPaymentId, razorpaySignature required'
+      });
+    }
+    const secret = process.env.RAZORPAY_KEY_SECRET;
+    if (!secret) return res.status(503).json({ message: 'Payment service not configured' });
+    const expectedSig = crypto.createHmac('sha256', secret)
+      .update(`${razorpayOrderId}|${razorpayPaymentId}`)
+      .digest('hex');
+    if (expectedSig !== razorpaySignature) {
+      return res.status(400).json({ message: 'Invalid payment signature' });
+    }
+
+    const order = await Order.findById(orderId);
+    if (!order) return res.status(404).json({ message: 'Order not found' });
+    if (order.user.toString() !== req.user.id.toString()) {
+      return res.status(403).json({ message: 'Not authorized' });
+    }
+
+    let payment;
+    try {
+      payment = await rzp.payments.fetch(razorpayPaymentId);
+    } catch (e) {
+      return res.status(400).json({ message: (e.error && e.error.description) || 'Could not verify payment' });
+    }
+
+    const result = await finalizeCapturedPayment(order._id.toString(), payment, {
+      signature: razorpaySignature
     });
-    order.razorpayOrderId = rzpOrder.id;
-    await order.save();
-    res.status(201).json({
-      orderId: order._id,
-      razorpayOrderId: rzpOrder.id,
-      amount: amountPaise,
-      currency: 'INR',
-      key: process.env.RAZORPAY_KEY_ID
-    });
+    if (!result.ok) {
+      return res.status(result.statusCode || 400).json({ message: result.error || 'Verification failed' });
+    }
+    res.json({ message: 'Payment verified', order: orderToClient(result.order) });
   } catch (err) {
     next(err);
   }
@@ -159,40 +468,17 @@ exports.webhook = async (req, res) => {
     const event = payload.event;
     console.log(`[webhook] event="${event}"`);
 
-    // payment.captured - payment success; also check stock (race condition) → auto-refund if insufficient
+    // payment.captured — same path as app verify-payment (atomic + idempotent)
     if (event === 'payment.captured') {
       const payment = payload.payload?.payment?.entity;
-      const orderId = payment?.order_id;
-      const ourOrder = await Order.findOne({ razorpayOrderId: orderId }).populate('items.product');
-      if (ourOrder && ourOrder.paymentStatus !== 'paid') {
-        ourOrder.paymentStatus = 'paid';
-        ourOrder.status = 'confirmed';
-        ourOrder.razorpayPaymentId = payment.id;
-        await ourOrder.save();
-        console.log(`[webhook] order ${ourOrder._id} → confirmed`);
-
-        // Post-payment stock check: if stock insufficient, auto-refund
-        const stockOk = await validateStock(ourOrder.items);
-        if (!stockOk.ok && rzp) {
-          try {
-            const amountPaise = Math.round((ourOrder.totalAmount || 0) * 100);
-            await rzp.payments.refund(payment.id, { amount: amountPaise });
-            ourOrder.paymentStatus = 'refunded';
-            ourOrder.status = 'cancelled';
-            ourOrder.refundStatus = 'pending';
-            ourOrder.cancelReason = stockOk.message || 'Insufficient stock - auto refund';
-            ourOrder.cancelledAt = new Date();
-            await ourOrder.save();
-            console.log('Auto-refund for insufficient stock:', ourOrder._id, stockOk.message);
-          } catch (refundErr) {
-            ourOrder.cancelReason = stockOk.message || 'Insufficient stock - refund pending';
-            ourOrder.refundStatus = 'failed';
-            await ourOrder.save();
-            console.error('Auto-refund failed:', refundErr);
-          }
-        } else if (stockOk.ok) {
-          // Stock OK – reduce inventory for sold items
-          await reduceStock(ourOrder.items);
+      const rzOrderId = payment?.order_id;
+      const ourOrder = await Order.findOne({ razorpayOrderId: rzOrderId });
+      if (ourOrder) {
+        const result = await finalizeCapturedPayment(ourOrder._id.toString(), payment, {});
+        if (result.ok) {
+          console.log(`[webhook] order ${ourOrder._id} capture ok idempotent=${!!result.idempotent}`);
+        } else {
+          console.warn(`[webhook] order ${ourOrder._id} capture skipped: ${result.error}`);
         }
       }
     }
@@ -209,24 +495,47 @@ exports.webhook = async (req, res) => {
         ourOrder.cancelledAt = new Date();
         await ourOrder.save();
         console.log(`[webhook] order ${ourOrder._id} → cancelled (payment failed)`);
+        notifyOrderPush(
+          ourOrder.user,
+          ourOrder._id,
+          'Payment unsuccessful',
+          'Your payment didn\'t go through. You can try again from your cart.'
+        ).catch(() => {});
       }
     }
 
-    // refund.processed - refund complete
+    // refund.processed — idempotent (duplicate webhooks must not double-restore stock)
     if (event === 'refund.processed') {
       const refund = payload.payload?.refund?.entity;
       const paymentId = refund?.payment_id;
-      const ourOrder = await Order.findOne({ razorpayPaymentId: paymentId });
-      if (ourOrder) {
-        ourOrder.paymentStatus = 'refunded';
-        ourOrder.status = 'cancelled';
-        ourOrder.refundStatus = 'processed';
-        ourOrder.razorpayRefundId = refund?.id;
-        ourOrder.refundAmount = (refund?.amount || 0) / 100;
-        if (!ourOrder.cancelledAt) ourOrder.cancelledAt = new Date();
-        await ourOrder.save();
-        // Restore inventory when refund completes
-        await restoreStock(ourOrder.items);
+      const patch = {
+        paymentStatus: 'refunded',
+        status: 'cancelled',
+        refundStatus: 'processed',
+        razorpayRefundId: refund?.id,
+        refundAmount: (refund?.amount || 0) / 100
+      };
+      const updated = await Order.findOneAndUpdate(
+        { razorpayPaymentId: paymentId, refundStatus: { $ne: 'processed' } },
+        { $set: patch },
+        { new: true }
+      ).populate('items.product');
+      if (updated) {
+        if (!updated.cancelledAt) {
+          updated.cancelledAt = new Date();
+          await updated.save();
+        }
+        // false = capture never reduced stock (e.g. auto-refund). undefined = legacy doc → keep old “always restore” behaviour.
+        if (updated.stockDeducted !== false) {
+          await restoreStock(updated.items);
+          await Order.updateOne({ _id: updated._id }, { $set: { stockDeducted: false } });
+        }
+        notifyOrderPush(
+          updated.user,
+          updated._id,
+          'Refund completed',
+          'Your refund has been processed. It can take 5–7 days to reach your bank or UPI.'
+        ).catch(() => {});
       }
     }
 
@@ -237,7 +546,14 @@ exports.webhook = async (req, res) => {
       const ourOrder = await Order.findOne({ razorpayPaymentId: paymentId });
       if (ourOrder) {
         ourOrder.refundStatus = 'failed';
+        ourOrder.refundLastError = (refund && (refund.status || refund.error_description)) || 'refund.failed webhook';
         await ourOrder.save();
+        notifyOrderPush(
+          ourOrder.user,
+          ourOrder._id,
+          'Refund issue',
+          'There was a problem completing your refund. Please contact support with your order ID.'
+        ).catch(() => {});
       }
       console.error('Razorpay refund failed:', JSON.stringify(refund));
     }
@@ -246,6 +562,99 @@ exports.webhook = async (req, res) => {
   } catch (err) {
     console.error('Webhook error:', err);
     res.status(500).send('Error');
+  }
+};
+
+/** Customer: cancel before shipment. Same refund rules as admin for paid orders. */
+exports.cancelOrderCustomer = async (req, res, next) => {
+  try {
+    if (!(await storePolicy.isCustomerOrderCancelEnabled())) {
+      return res.status(403).json({
+        message: 'Cancelling orders from the app is disabled. Please contact support or WhatsApp us.'
+      });
+    }
+    const order = await Order.findById(req.params.id);
+    if (!order) return res.status(404).json({ message: 'Order not found' });
+    if (order.user.toString() !== req.user.id.toString()) {
+      return res.status(403).json({ message: 'Not authorized' });
+    }
+    if (order.status === 'cancelled') return res.status(400).json({ message: 'Order already cancelled' });
+    if (!['pending', 'confirmed'].includes(order.status)) {
+      return res.status(400).json({
+        message: 'This order can no longer be cancelled online. For delivered orders, use return or exchange.'
+      });
+    }
+    const { reason } = req.body || {};
+
+    if (order.paymentStatus === 'pending' && order.razorpayOrderId && rzp) {
+      try {
+        const collection = await rzp.orders.fetchPayments(order.razorpayOrderId);
+        const items = collection.items || [];
+        const captured = items.find((p) => p.status === 'captured');
+        if (captured) {
+          return res.status(409).json({
+            message:
+              'Payment may have completed. Refresh your orders list or wait a moment, then try again.'
+          });
+        }
+      } catch (_) { /* ignore gateway errors; proceed with cancel */ }
+    }
+
+    if (order.paymentStatus === 'paid' && order.razorpayPaymentId) {
+      if (!rzp) return res.status(503).json({ message: 'Payment service not configured' });
+      const amountPaise = Math.round((order.totalAmount || 0) * 100);
+      try {
+        const refund = await rzp.payments.refund(order.razorpayPaymentId, { amount: amountPaise });
+        order.refundStatus = 'pending';
+        order.razorpayRefundId = refund.id;
+        order.refundAmount = order.totalAmount;
+        order.refundLastError = '';
+        order.cancelReason = reason || 'Cancelled by customer';
+        order.cancelledBy = req.user.id;
+        order.cancelledAt = new Date();
+        order.status = 'cancelled';
+        await order.save();
+        notifyOrderPush(
+          order.user,
+          order._id,
+          'Refund started',
+          'Your cancellation refund is on the way — usually 5–7 working days.'
+        ).catch(() => {});
+        return res.json({
+          message: 'Refund initiated. You should receive the amount within 5–7 working days.',
+          order: orderToClient(order)
+        });
+      } catch (refErr) {
+        order.refundStatus = 'failed';
+        order.refundLastError = (refErr.error && refErr.error.description) || refErr.message || 'Refund failed';
+        order.cancelReason = reason || 'Cancelled by customer — refund failed';
+        order.cancelledBy = req.user.id;
+        order.cancelledAt = new Date();
+        order.status = 'cancelled';
+        await order.save();
+        return res.status(400).json({
+          message: order.refundLastError,
+          order: orderToClient(order)
+        });
+      }
+    }
+
+    order.status = 'cancelled';
+    order.paymentStatus = order.paymentStatus === 'pending' ? 'failed' : order.paymentStatus;
+    order.cancelReason = reason || 'Cancelled by customer';
+    order.cancelledBy = req.user.id;
+    order.cancelledAt = new Date();
+    await order.save();
+    notifyOrderPush(
+      order.user,
+      order._id,
+      'Order cancelled',
+      (order.cancelReason || 'Your order was cancelled.').slice(0, 200)
+    ).catch(() => {});
+    res.json(orderToClient(order));
+  } catch (err) {
+    if (err.error?.description) return res.status(400).json({ message: err.error.description });
+    next(err);
   }
 };
 
@@ -260,16 +669,46 @@ exports.cancelOrder = async (req, res, next) => {
     if (order.paymentStatus === 'paid' && order.razorpayPaymentId) {
       if (!rzp) return res.status(503).json({ message: 'Payment service not configured' });
       const amountPaise = Math.round((order.totalAmount || 0) * 100);
-      const refund = await rzp.payments.refund(order.razorpayPaymentId, { amount: amountPaise });
-      order.refundStatus = 'pending';
-      order.razorpayRefundId = refund.id;
-      order.refundAmount = order.totalAmount;
-      order.cancelReason = reason || 'Cancelled by admin';
-      order.cancelledBy = req.user.id;
-      order.cancelledAt = new Date();
-      order.status = 'cancelled';
-      await order.save();
-      return res.json({ message: 'Refund initiated. Customer will receive amount in 5-7 days.', order });
+      try {
+        const refund = await rzp.payments.refund(order.razorpayPaymentId, { amount: amountPaise });
+        order.refundStatus = 'pending';
+        order.razorpayRefundId = refund.id;
+        order.refundAmount = order.totalAmount;
+        order.refundLastError = '';
+        order.cancelReason = reason || 'Cancelled by admin';
+        order.cancelledBy = req.user.id;
+        order.cancelledAt = new Date();
+        order.status = 'cancelled';
+        await order.save();
+        notifyOrderPush(
+          order.user,
+          order._id,
+          'Refund started',
+          'Your order was cancelled and a refund has been started. Allow 5–7 working days.'
+        ).catch(() => {});
+        return res.json({
+          message: 'Refund initiated. Customer will receive amount in 5-7 days.',
+          order: orderToClient(order)
+        });
+      } catch (refErr) {
+        order.refundStatus = 'failed';
+        order.refundLastError = (refErr.error && refErr.error.description) || refErr.message || 'Refund failed';
+        order.cancelReason = reason || 'Cancelled by admin — refund failed';
+        order.cancelledBy = req.user.id;
+        order.cancelledAt = new Date();
+        order.status = 'cancelled';
+        await order.save();
+        notifyOrderPush(
+          order.user,
+          order._id,
+          'Refund issue',
+          'Your order was cancelled but the refund needs manual help. Please contact support.'
+        ).catch(() => {});
+        return res.status(400).json({
+          message: order.refundLastError,
+          order: orderToClient(order)
+        });
+      }
     }
 
     order.status = 'cancelled';
@@ -278,7 +717,13 @@ exports.cancelOrder = async (req, res, next) => {
     order.cancelledBy = req.user.id;
     order.cancelledAt = new Date();
     await order.save();
-    res.json(order);
+    notifyOrderPush(
+      order.user,
+      order._id,
+      'Order cancelled',
+      (order.cancelReason || 'Your order was cancelled by the store.').slice(0, 200)
+    ).catch(() => {});
+    res.json(orderToClient(order));
   } catch (err) {
     if (err.error?.description) return res.status(400).json({ message: err.error.description });
     next(err);

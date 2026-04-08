@@ -94,6 +94,35 @@ exports.uploadBanner = async (req, res, next) => {
   }
 };
 
+const uploadVideoToCloudinary = (buffer) => {
+  return new Promise((resolve, reject) => {
+    const uploadStream = cloudinary.uploader.upload_stream(
+      {
+        folder: 'kapda_junction/returns',
+        resource_type: 'video'
+      },
+      (err, result) => {
+        if (err) reject(err);
+        else resolve(result.secure_url);
+      }
+    );
+    bufferToStream(buffer).pipe(uploadStream);
+  });
+};
+
+/** Customer or admin — short proof video for returns. */
+exports.uploadReturnVideo = async (req, res, next) => {
+  try {
+    if (!req.file?.buffer) {
+      return res.status(400).json({ message: 'No video file provided' });
+    }
+    const url = await uploadVideoToCloudinary(req.file.buffer);
+    res.json({ url });
+  } catch (err) {
+    next(err);
+  }
+};
+
 exports.uploadMultiple = async (req, res, next) => {
   try {
     const files = req.files || [];

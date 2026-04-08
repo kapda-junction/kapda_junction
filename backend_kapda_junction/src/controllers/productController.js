@@ -66,6 +66,16 @@ const buildQuery = (query, isAdmin) => {
   }
   if (query.soldOut === 'true') q.soldOut = true;
   if (query.soldOut === 'false') q.soldOut = false;
+
+  const sizeTrim = query.size != null && String(query.size).trim() !== '' ? String(query.size).trim() : null;
+  const colorTrim = query.color != null && String(query.color).trim() !== '' ? String(query.color).trim() : null;
+  if (sizeTrim || colorTrim) {
+    const elem = {};
+    if (sizeTrim) elem.size = new RegExp(`^${escapeRegex(sizeTrim)}$`, 'i');
+    if (colorTrim) elem.color = new RegExp(`^${escapeRegex(colorTrim)}$`, 'i');
+    q.variants = { $elemMatch: elem };
+  }
+
   return q;
 };
 

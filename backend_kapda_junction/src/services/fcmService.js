@@ -76,7 +76,14 @@ async function sendToTokens(tokens, payload) {
       body: payload.body
     },
     data: toStringMap(payload.data),
-    android: { priority: 'high' }
+    android: { priority: 'high' },
+    apns: {
+      payload: {
+        aps: {
+          sound: 'default'
+        }
+      }
+    }
   };
 
   if (payload.imageUrl) {

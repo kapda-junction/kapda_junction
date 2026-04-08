@@ -21,6 +21,9 @@ const wishlistRoutes = require('./routes/wishlistRoutes');
 const activityRoutes = require('./routes/activityRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 const deviceRoutes = require('./routes/deviceRoutes');
+const couponRoutes = require('./routes/couponRoutes');
+const returnRoutes = require('./routes/returnRoutes');
+const reviewRoutes = require('./routes/reviewRoutes');
 const shareController = require('./controllers/shareController');
 
 const app = express();
@@ -72,6 +75,9 @@ app.use('/api/wishlist', wishlistRoutes);
 app.use('/api/activity', activityRoutes);
 app.use('/api/admin/notifications', notificationRoutes);
 app.use('/api/devices', deviceRoutes);
+app.use('/api/coupons', couponRoutes);
+app.use('/api/returns', returnRoutes);
+app.use('/api/reviews', reviewRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));
