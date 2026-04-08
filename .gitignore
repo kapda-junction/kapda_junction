@@ -14,6 +14,35 @@ dist/
 .angular/
 .vercel/
 
+# Flutter / Dart (customer + admin apps under repo root)
+**/doc/api/
+**/ios/Flutter/.last_build_id
+**/ios/Pods/
+**/ios/**/.symlinks/
+**/ios/**/Generated.xcconfig
+**/ios/**/flutter_export_environment.sh
+**/ios/ServiceDefinitions.json
+**/ios/Runner/GeneratedPluginRegistrant.*
+
+**/android/.gradle/
+**/android/captures/
+**/android/local.properties
+**/android/**/GeneratedPluginRegistrant.java
+**/android/**/key.properties
+*.jks
+*.keystore
+
+**/.dart_tool/
+**/build/
+
+# Flutter tool / plugins
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+
+# Symbolication / obfuscation (release)
+**/app.*.symbols
+**/app.*.map.json
+
 # IDE & OS
 .idea/
 .vscode/

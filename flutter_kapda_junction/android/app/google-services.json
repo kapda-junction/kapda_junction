@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1019108521991",
+    "project_id": "kapda-junction-aee36",
+    "storage_bucket": "kapda-junction-aee36.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1019108521991:android:fec1e3ef5570193db112a2",
+        "android_client_info": {
+          "package_name": "com.kadadjunction.flutter_kapda_junction"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD9UOE95S56lPf9ChuzzQmoOnCB61gYaKg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
