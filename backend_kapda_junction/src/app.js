@@ -44,9 +44,9 @@ app.use(cors({
 }));
 app.use(morgan('dev'));
 // Ensure DB connected (for Vercel serverless).
-// Health check should stay lightweight so keep-alive pings don't repeatedly pay DB cost.
+// Health check + root probes should stay lightweight (Render/Cloudflare often use HEAD /).
 app.use(async (req, res, next) => {
-  if (req.path === '/api/health') return next();
+  if (req.path === '/api/health' || req.path === '/') return next();
   try {
     await connectDB();
     next();
@@ -80,6 +80,10 @@ app.use('/api/returns', returnRoutes);
 app.use('/api/reviews', reviewRoutes);
 
 // Health check
+app.head('/', (req, res) => res.sendStatus(200));
+app.get('/', (req, res) =>
+  res.status(200).json({ ok: true, service: 'kapda-junction-api' })
+);
 app.get('/api/health', (req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));
 
 // Share page - OG meta for WhatsApp/FB link preview, then redirect to frontend
