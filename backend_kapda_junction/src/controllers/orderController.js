@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const Order = require('../models/Order');
+const ReturnRequest = require('../models/ReturnRequest');
 const Product = require('../models/Product');
 const Coupon = require('../models/Coupon');
 const Razorpay = require('razorpay');
@@ -10,11 +11,13 @@ const {
   validateAndApply,
   orderItemsForDb
 } = require('../services/couponService');
-const { notifyOrderPush } = require('../services/customerPushService');
+const { notifyOrderPush, notifyReturnsPush } = require('../services/customerPushService');
 
 const rzp = process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET
   ? new Razorpay({ key_id: process.env.RAZORPAY_KEY_ID, key_secret: process.env.RAZORPAY_KEY_SECRET })
   : null;
+
+const CANCEL_REQUEST_REASON_MIN = 10;
 
 function orderToClient(doc) {
   const o = doc.toObject ? doc.toObject() : { ...doc };
@@ -601,42 +604,55 @@ exports.cancelOrderCustomer = async (req, res, next) => {
     }
 
     if (order.paymentStatus === 'paid' && order.razorpayPaymentId) {
-      if (!rzp) return res.status(503).json({ message: 'Payment service not configured' });
-      const amountPaise = Math.round((order.totalAmount || 0) * 100);
-      try {
-        const refund = await rzp.payments.refund(order.razorpayPaymentId, { amount: amountPaise });
-        order.refundStatus = 'pending';
-        order.razorpayRefundId = refund.id;
-        order.refundAmount = order.totalAmount;
-        order.refundLastError = '';
-        order.cancelReason = reason || 'Cancelled by customer';
-        order.cancelledBy = req.user.id;
-        order.cancelledAt = new Date();
-        order.status = 'cancelled';
-        await order.save();
-        notifyOrderPush(
-          order.user,
-          order._id,
-          'Refund started',
-          'Your cancellation refund is on the way — usually 5–7 working days.'
-        ).catch(() => {});
-        return res.json({
-          message: 'Refund initiated. You should receive the amount within 5–7 working days.',
-          order: orderToClient(order)
-        });
-      } catch (refErr) {
-        order.refundStatus = 'failed';
-        order.refundLastError = (refErr.error && refErr.error.description) || refErr.message || 'Refund failed';
-        order.cancelReason = reason || 'Cancelled by customer — refund failed';
-        order.cancelledBy = req.user.id;
-        order.cancelledAt = new Date();
-        order.status = 'cancelled';
-        await order.save();
+      const detail = String(reason || '').trim();
+      if (detail.length < CANCEL_REQUEST_REASON_MIN) {
         return res.status(400).json({
-          message: order.refundLastError,
-          order: orderToClient(order)
+          message: `Please explain why you want to cancel (at least ${CANCEL_REQUEST_REASON_MIN} characters). Admin will review your request and proof before any refund.`
         });
       }
+      const videoRequired = await storePolicy.isReturnVideoRequired();
+      const v = String(req.body.videoUrl || '').trim();
+      if (videoRequired && !v.startsWith('http')) {
+        return res.status(400).json({
+          message: 'A short proof video is required — record and upload from the app, then submit your cancellation request.'
+        });
+      }
+      const terminal = ReturnRequest.TERMINAL_RETURN_STATUSES;
+      const activeOther = await ReturnRequest.findOne({
+        order: order._id,
+        user: req.user.id,
+        status: { $nin: terminal }
+      });
+      if (activeOther) {
+        return res.status(400).json({
+          message: 'You already have an open return, exchange, or cancellation request for this order.'
+        });
+      }
+      const rr = await ReturnRequest.create({
+        user: req.user.id,
+        order: order._id,
+        type: 'order_cancel',
+        items: [],
+        reason: 'Order cancellation (before shipment)',
+        reasonDetail: detail,
+        videoUrl: videoRequired ? v : (v || ''),
+        exchangeFor: { size: '', color: '' },
+        status: 'requested'
+      });
+      const populated = await ReturnRequest.findById(rr._id)
+        .populate('order', 'status totalAmount paymentStatus')
+        .populate('user', 'name email');
+      notifyReturnsPush(
+        req.user.id,
+        'Cancellation request sent',
+        'We will verify your details and process a refund only after approval.'
+      ).catch(() => {});
+      return res.status(201).json({
+        message:
+          'Cancellation request submitted. An admin will verify your proof (including video) before starting any refund.',
+        cancelRequest: populated,
+        order: orderToClient(order)
+      });
     }
 
     order.status = 'cancelled';

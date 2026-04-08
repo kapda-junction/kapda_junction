@@ -24,8 +24,9 @@ const RETURN_STATUSES = [
 const returnRequestSchema = new mongoose.Schema({
   user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   order: { type: mongoose.Schema.Types.ObjectId, ref: 'Order', required: true },
-  type: { type: String, enum: ['return', 'exchange'], required: true },
-  items: { type: [returnLineSchema], validate: [arr => arr?.length > 0, 'At least one line'] },
+  type: { type: String, enum: ['return', 'exchange', 'order_cancel'], required: true },
+  /** Empty when type is order_cancel (full order). */
+  items: { type: [returnLineSchema], default: [] },
   reason: { type: String, required: true },
   reasonDetail: { type: String, default: '' },
   /** Proof video (Cloudinary URL). Required when store policy mandates it. */
@@ -46,6 +47,13 @@ const returnRequestSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 const TERMINAL = ['rejected', 'refunded', 'completed', 'cancelled'];
+
+returnRequestSchema.pre('validate', function validateItems(next) {
+  if (this.type !== 'order_cancel' && (!this.items || this.items.length === 0)) {
+    this.invalidate('items', 'At least one line item is required');
+  }
+  next();
+});
 
 returnRequestSchema.index({ order: 1, user: 1, createdAt: -1 });
 returnRequestSchema.index({ status: 1 });

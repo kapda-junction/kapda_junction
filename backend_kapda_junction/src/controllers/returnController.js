@@ -1,7 +1,12 @@
+const Razorpay = require('razorpay');
 const Order = require('../models/Order');
 const ReturnRequest = require('../models/ReturnRequest');
 const storePolicy = require('../services/storePolicyService');
-const { notifyReturnsPush } = require('../services/customerPushService');
+const { notifyReturnsPush, notifyOrderPush } = require('../services/customerPushService');
+
+const rzp = process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET
+  ? new Razorpay({ key_id: process.env.RAZORPAY_KEY_ID, key_secret: process.env.RAZORPAY_KEY_SECRET })
+  : null;
 const TERMINAL_RETURN_STATUSES = ReturnRequest.TERMINAL_RETURN_STATUSES;
 const RETURN_STATUSES = ReturnRequest.RETURN_STATUSES;
 
@@ -75,6 +80,12 @@ function pushCopyForReturnStatus(status, type) {
         body: 'Your refund for this return is being processed.'
       };
     case 'refunded':
+      if (type === 'order_cancel') {
+        return {
+          title: 'Refund sent',
+          body: 'Your order-cancellation refund has been completed. Allow a few days for your bank/UPI.'
+        };
+      }
       return {
         title: 'Refund sent',
         body: 'Refund for your return has been completed. Allow a few days for your bank/UPI.'
@@ -256,6 +267,58 @@ exports.cancelMine = async (req, res, next) => {
   }
 };
 
+/**
+ * After admin approves an order_cancel request: Razorpay refund + mark order cancelled.
+ * Webhook refund.processed finalises paymentStatus / stock like other refunds.
+ */
+async function fulfillOrderCancelAfterApproval(doc, adminUserId) {
+  const order = await Order.findById(doc.order);
+  if (!order) throw new Error('Order not found');
+  if (order.status === 'cancelled') {
+    doc.status = 'refunded';
+    await doc.save();
+    return;
+  }
+  if (!(order.paymentStatus === 'paid' && order.razorpayPaymentId)) {
+    order.status = 'cancelled';
+    order.cancelReason = doc.reasonDetail || doc.reason || 'Order cancellation approved';
+    order.cancelledBy = adminUserId;
+    order.cancelledAt = new Date();
+    if (order.paymentStatus === 'pending') order.paymentStatus = 'failed';
+    await order.save();
+    doc.status = 'completed';
+    await doc.save();
+    notifyOrderPush(
+      order.user,
+      order._id,
+      'Order cancelled',
+      'Your cancellation was approved.'
+    ).catch(() => {});
+    return;
+  }
+  if (!rzp) throw new Error('Payment service not configured');
+  const amountPaise = Math.round((order.totalAmount || 0) * 100);
+  const refund = await rzp.payments.refund(order.razorpayPaymentId, { amount: amountPaise });
+  order.refundStatus = 'pending';
+  order.razorpayRefundId = refund.id;
+  order.refundAmount = order.totalAmount;
+  order.refundLastError = '';
+  order.cancelReason = doc.reasonDetail || doc.reason || 'Order cancellation approved';
+  order.cancelledBy = adminUserId;
+  order.cancelledAt = new Date();
+  order.status = 'cancelled';
+  await order.save();
+  doc.status = 'refunded';
+  doc.refundAmount = order.totalAmount;
+  await doc.save();
+  notifyOrderPush(
+    order.user,
+    order._id,
+    'Refund started',
+    'Your cancellation was approved. Refund is on the way — usually 5–7 working days.'
+  ).catch(() => {});
+}
+
 exports.update = async (req, res, next) => {
   try {
     const doc = await ReturnRequest.findById(req.params.id);
@@ -284,10 +347,32 @@ exports.update = async (req, res, next) => {
       }
       if (status === 'approved') {
         const needVideo = await storePolicy.isReturnVideoRequired();
-        if (!doc.videoUrl || !String(doc.videoUrl).startsWith('http')) {
+        if (needVideo && (!doc.videoUrl || !String(doc.videoUrl).startsWith('http'))) {
           return res.status(400).json({
             message: 'Cannot approve: customer proof video is missing or invalid.'
           });
+        }
+        if (doc.type === 'order_cancel') {
+          doc.status = 'approved';
+          await doc.save();
+          try {
+            await fulfillOrderCancelAfterApproval(doc, req.user.id);
+          } catch (err) {
+            doc.status = 'requested';
+            await doc.save();
+            if (err.error?.description) return res.status(400).json({ message: err.error.description });
+            return res.status(400).json({ message: err.message || 'Refund failed' });
+          }
+          const populated = await ReturnRequest.findById(doc._id)
+            .populate(
+              'order',
+              'status totalAmount paymentStatus createdAt cancelReason cancelledAt cancelledBy refundStatus refundAmount'
+            )
+            .populate('user', 'name email');
+          res.json(populated);
+          const copy = pushCopyForReturnStatus(doc.status, doc.type);
+          if (copy) notifyReturnsPush(doc.user, copy.title, copy.body).catch(() => {});
+          return;
         }
       }
       doc.status = status;
