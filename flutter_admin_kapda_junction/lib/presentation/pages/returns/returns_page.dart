@@ -119,6 +119,17 @@ List<Widget> _adminReturnReadOnlySections(
   return lines;
 }
 
+String _adminReturnTypeLabel(String type) {
+  switch (type) {
+    case 'exchange':
+      return 'Exchange';
+    case 'order_cancel':
+      return 'Order cancel';
+    default:
+      return 'Return';
+  }
+}
+
 class AdminReturnsPage extends StatelessWidget {
   const AdminReturnsPage({super.key});
 
@@ -171,7 +182,9 @@ class _ReturnsAdminView extends StatelessWidget {
         final cs = Theme.of(ctx).colorScheme;
         return StatefulBuilder(
           builder: (ctx, setSt) => AlertDialog(
-            title: Text('Return ${r.id.length > 6 ? r.id.substring(r.id.length - 6) : r.id}'),
+            title: Text(
+              '${_adminReturnTypeLabel(r.type)} ${r.id.length > 6 ? r.id.substring(r.id.length - 6) : r.id}',
+            ),
             content: SingleChildScrollView(
               child: SizedBox(
                 width: 420,
@@ -352,7 +365,7 @@ class _ReturnsAdminView extends StatelessWidget {
                 color: cs.surface,
                 child: ListTile(
                   title: Text(
-                    '${r.type == 'exchange' ? 'Exchange' : 'Return'} · ${r.userName}',
+                    '${_adminReturnTypeLabel(r.type)} · ${r.userName}',
                     style: const TextStyle(fontWeight: FontWeight.w700),
                   ),
                   subtitle: Column(
@@ -372,7 +385,7 @@ class _ReturnsAdminView extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                         ),
                       Text(
-                        '${r.type == 'exchange' ? 'Exchange' : 'Return'} · ${r.reason}'
+                        '${_adminReturnTypeLabel(r.type)} · ${r.reason}'
                         '${r.videoUrl.isEmpty ? '' : ' · video'} · …${r.orderId.length > 6 ? r.orderId.substring(r.orderId.length - 6) : r.orderId}',
                         style: tt.bodySmall,
                       ),

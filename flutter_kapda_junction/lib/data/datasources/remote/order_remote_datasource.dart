@@ -44,11 +44,17 @@ class OrderRemoteDataSource {
     return OrderModel.fromJson(data['order'] as Map<String, dynamic>);
   }
 
-  Future<void> cancelOrderCustomer(String orderId, {String? reason}) async {
+  /// Unpaid orders: instant cancel. Paid orders: creates admin-reviewed cancel request (201).
+  Future<void> cancelOrderCustomer(
+    String orderId, {
+    String? reason,
+    String? videoUrl,
+  }) async {
     await _client.put(
       '${ApiConstants.orders}/$orderId/cancel-customer',
       data: {
         if (reason != null && reason.isNotEmpty) 'reason': reason,
+        if (videoUrl != null && videoUrl.isNotEmpty) 'videoUrl': videoUrl,
       },
     );
   }

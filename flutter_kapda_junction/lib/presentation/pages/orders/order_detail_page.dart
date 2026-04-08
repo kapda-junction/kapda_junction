@@ -52,6 +52,25 @@ String _returnStatusDisplay(String status) {
   return status.replaceAll('_', ' ');
 }
 
+String _returnTypeChipLabel(String type) {
+  switch (type) {
+    case 'exchange':
+      return 'Exchange';
+    case 'order_cancel':
+      return 'Cancel order';
+    default:
+      return 'Return';
+  }
+}
+
+bool _hasPendingOrderCancel(List<ReturnRequest>? list) {
+  if (list == null) return false;
+  for (final r in list) {
+    if (r.type == 'order_cancel' && r.status == 'requested') return true;
+  }
+  return false;
+}
+
 class OrderDetailPage extends StatefulWidget {
   final String orderId;
   const OrderDetailPage({super.key, required this.orderId});
@@ -113,62 +132,55 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
   }
 
   Future<void> _confirmCancelOrder(BuildContext context, Order order) async {
-    final reasonCtrl = TextEditingController();
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Cancel order?'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              order.isPaid
-                  ? 'A refund will be started to your original payment method.'
-                  : 'This order will be marked as cancelled.',
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: reasonCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Reason (optional)',
-              ),
-              maxLines: 2,
-            ),
-          ],
+    if (order.isPaid) {
+      await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        showDragHandle: true,
+        builder: (sheetCtx) => _OrderCancelSheet(
+          order: order,
+          returnVideoRequired: _returnVideoRequired ?? true,
+          onSubmitted: () {
+            Navigator.pop(sheetCtx);
+            _onCancelFlowCompleted(
+              message:
+                  'Cancellation request sent. Admin will verify your video and details before any refund.',
+            );
+          },
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Keep order'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Cancel order'),
-          ),
-        ],
-      ),
+      );
+      return;
+    }
+
+    final result = await showDialog<(bool, String)?>(
+      context: context,
+      builder: (ctx) => const _UnpaidCancelDialog(),
     );
-    final note = reasonCtrl.text.trim();
-    reasonCtrl.dispose();
-    if (ok != true || !mounted) return;
+    if (result == null || !result.$1 || !mounted) return;
+    final note = result.$2.trim();
     try {
       await sl<OrderRemoteDataSource>().cancelOrderCustomer(
         order.id,
         reason: note.isEmpty ? null : note,
       );
+      _onCancelFlowCompleted(message: 'Order cancelled');
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$e')),
+      );
+    }
+  }
+
+  /// Defers BLoC + [setState] until after the route/dialog cleanup to avoid framework asserts.
+  void _onCancelFlowCompleted({required String message}) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _bloc.add(OrderDetailRequested(widget.orderId));
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Order cancelled')),
-      );
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$e')),
-        );
-      }
-    }
+      _loadReturns();
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    });
   }
 
   Future<void> _openReviewForItem(
@@ -958,9 +970,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                                               children: [
                                                 Chip(
                                                   label: Text(
-                                                    r.type == 'exchange'
-                                                        ? 'Exchange'
-                                                        : 'Return',
+                                                    _returnTypeChipLabel(r.type),
                                                   ),
                                                   visualDensity:
                                                       VisualDensity.compact,
@@ -1012,7 +1022,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                                                           .showSnackBar(
                                                         const SnackBar(
                                                           content: Text(
-                                                              'Return request cancelled'),
+                                                              'Request cancelled'),
                                                         ),
                                                       );
                                                     }
@@ -1064,7 +1074,25 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                             order.status == OrderStatus.confirmed) &&
                         !order.isCancelled) ...[
                       const SizedBox(height: 12),
-                      if (!(_customerOrderCancelEnabled ?? true))
+                      if (_hasPendingOrderCancel(_returns))
+                        _Card(
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Icon(Icons.hourglass_top_outlined,
+                                  color: cs.secondary, size: 22),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  'Cancellation request sent. An admin will review your proof video and reason before any refund is started.',
+                                  style: tt.bodyMedium
+                                      ?.copyWith(fontWeight: FontWeight.w600),
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      else if (!(_customerOrderCancelEnabled ?? true))
                         _Card(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1101,7 +1129,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                               const SizedBox(height: 8),
                               Text(
                                 order.isPaid
-                                    ? 'If you cancel, a full refund will be started to your original payment method (card / UPI / wallet per Razorpay).'
+                                    ? 'We will send a cancellation request to our team. A Razorpay refund is started only after an admin approves your video and details.'
                                     : 'You can cancel before this order is shipped.',
                                 style: tt.bodySmall?.copyWith(
                                   color: cs.onSurfaceVariant,
@@ -1130,6 +1158,241 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
             }
             return const SizedBox();
           },
+        ),
+      ),
+    );
+  }
+}
+
+class _UnpaidCancelDialog extends StatefulWidget {
+  const _UnpaidCancelDialog();
+
+  @override
+  State<_UnpaidCancelDialog> createState() => _UnpaidCancelDialogState();
+}
+
+class _UnpaidCancelDialogState extends State<_UnpaidCancelDialog> {
+  final _reasonCtrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _reasonCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Cancel order?'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('This order will be marked as cancelled.'),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _reasonCtrl,
+            decoration: const InputDecoration(labelText: 'Reason (optional)'),
+            maxLines: 2,
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Keep order'),
+        ),
+        FilledButton(
+          onPressed: () =>
+              Navigator.pop(context, (true, _reasonCtrl.text.trim())),
+          child: const Text('Cancel order'),
+        ),
+      ],
+    );
+  }
+}
+
+/// Paid orders: min. detail + proof video (when policy requires), then API creates admin review request.
+class _OrderCancelSheet extends StatefulWidget {
+  final Order order;
+  final VoidCallback onSubmitted;
+  final bool returnVideoRequired;
+
+  const _OrderCancelSheet({
+    required this.order,
+    required this.onSubmitted,
+    required this.returnVideoRequired,
+  });
+
+  @override
+  State<_OrderCancelSheet> createState() => _OrderCancelSheetState();
+}
+
+class _OrderCancelSheetState extends State<_OrderCancelSheet> {
+  final _detailCtrl = TextEditingController();
+  bool _saving = false;
+  String? _videoUrl;
+  bool _uploadingVideo = false;
+
+  @override
+  void dispose() {
+    _detailCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickAndUploadVideo(ImageSource source) async {
+    final x = await ImagePicker().pickVideo(
+      source: source,
+      maxDuration: const Duration(seconds: 90),
+    );
+    if (x == null || !mounted) return;
+    setState(() => _uploadingVideo = true);
+    try {
+      final url = await sl<ApiClient>().uploadReturnVideo(x.path);
+      if (!mounted) return;
+      setState(() {
+        _videoUrl = url;
+        _uploadingVideo = false;
+      });
+    } catch (e) {
+      if (mounted) {
+        setState(() => _uploadingVideo = false);
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('$e')));
+      }
+    }
+  }
+
+  Future<void> _submit() async {
+    final d = _detailCtrl.text.trim();
+    if (d.length < 10) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Please explain why you want to cancel (at least 10 characters)',
+          ),
+        ),
+      );
+      return;
+    }
+    if (widget.returnVideoRequired &&
+        (_videoUrl == null || _videoUrl!.trim().isEmpty)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please upload a short proof video'),
+        ),
+      );
+      return;
+    }
+    setState(() => _saving = true);
+    try {
+      await sl<OrderRemoteDataSource>().cancelOrderCustomer(
+        widget.order.id,
+        reason: d,
+        videoUrl: _videoUrl?.trim().isNotEmpty == true ? _videoUrl!.trim() : null,
+      );
+      widget.onSubmitted();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('$e')));
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    final bottomInset = MediaQuery.paddingOf(context).bottom;
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(20, 12, 20, 20 + bottomInset),
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Request order cancellation',
+              style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Your reason and video go to the team for review. Razorpay refund runs only after approval.',
+              style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _detailCtrl,
+              maxLines: 4,
+              decoration: const InputDecoration(
+                labelText: 'Why do you want to cancel? (min. 10 characters)',
+                alignLabelWithHint: true,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Proof video',
+              style: tt.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              widget.returnVideoRequired
+                  ? 'Required — short clip as proof (same as returns).'
+                  : 'Optional — upload if you can.',
+              style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                FilledButton.tonalIcon(
+                  onPressed: _uploadingVideo
+                      ? null
+                      : () => _pickAndUploadVideo(ImageSource.camera),
+                  icon: _uploadingVideo
+                      ? SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: cs.onSurfaceVariant,
+                          ),
+                        )
+                      : const Icon(Icons.videocam_outlined, size: 20),
+                  label: Text(_uploadingVideo ? 'Uploading…' : 'Record'),
+                ),
+                const SizedBox(width: 8),
+                OutlinedButton.icon(
+                  onPressed: _uploadingVideo
+                      ? null
+                      : () => _pickAndUploadVideo(ImageSource.gallery),
+                  icon: const Icon(Icons.video_library_outlined, size: 20),
+                  label: const Text('Gallery'),
+                ),
+              ],
+            ),
+            if (_videoUrl != null && _videoUrl!.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Uploaded',
+                style: tt.labelMedium?.copyWith(color: cs.primary),
+              ),
+            ],
+            const SizedBox(height: 24),
+            FilledButton(
+              onPressed: _saving ? null : _submit,
+              child: _saving
+                  ? const SizedBox(
+                      height: 22,
+                      width: 22,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Submit cancellation request'),
+            ),
+          ],
         ),
       ),
     );
