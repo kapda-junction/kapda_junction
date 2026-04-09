@@ -16,6 +16,8 @@ class ProductVariant extends Equatable {
 class Product extends Equatable {
   final String id;
   final String name;
+  /// Short shop / POS code (4–5 chars), unique when set.
+  final String? shopCode;
   final String? slug;
   final String? description;
   final double price;
@@ -33,7 +35,7 @@ class Product extends Equatable {
   final DateTime? createdAt;
 
   const Product({
-    required this.id, required this.name, this.slug, this.description,
+    required this.id, required this.name, this.shopCode, this.slug, this.description,
     required this.price, this.compareAtPrice, this.categoryId, this.categoryName,
     required this.images, this.colorImages = const {}, required this.variants, required this.soldOut,
     required this.isActive, required this.isFeatured, this.heroTag, this.heroOrder,
@@ -43,5 +45,5 @@ class Product extends Equatable {
   String? get thumbnailUrl => images.isNotEmpty ? images.first : null;
 
   @override
-  List<Object?> get props => [id, name, price];
+  List<Object?> get props => [id, name, shopCode, price];
 }

@@ -28,7 +28,9 @@ class ApiClient {
           handler.next(options);
         },
         onError: (error, handler) {
-          AppErrorHandler.handleDioError(error);
+          if (error.requestOptions.extra['skipGlobalError'] != true) {
+            AppErrorHandler.handleDioError(error);
+          }
           handler.next(error);
         },
       ),
@@ -47,11 +49,31 @@ class ApiClient {
     );
   }
 
-  Future<Response> get(String path, {Map<String, dynamic>? params}) =>
-      _dio.get(path, queryParameters: params);
+  Future<Response> get(
+    String path, {
+    Map<String, dynamic>? params,
+    bool skipGlobalError = false,
+  }) =>
+      _dio.get(
+        path,
+        queryParameters: params,
+        options: skipGlobalError
+            ? Options(extra: const {'skipGlobalError': true})
+            : null,
+      );
 
-  Future<Response> post(String path, {dynamic data}) =>
-      _dio.post(path, data: data);
+  Future<Response> post(
+    String path, {
+    dynamic data,
+    bool skipGlobalError = false,
+  }) =>
+      _dio.post(
+        path,
+        data: data,
+        options: skipGlobalError
+            ? Options(extra: const {'skipGlobalError': true})
+            : null,
+      );
 
   Future<Response> put(String path, {dynamic data}) =>
       _dio.put(path, data: data);

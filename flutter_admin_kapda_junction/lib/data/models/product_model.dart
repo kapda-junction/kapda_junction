@@ -20,7 +20,7 @@ class ProductVariantModel extends ProductVariant {
 
 class ProductModel extends Product {
   const ProductModel({
-    required super.id, required super.name, super.slug, super.description,
+    required super.id, required super.name, super.shopCode, super.slug, super.description,
     required super.price, super.compareAtPrice, super.categoryId, super.categoryName,
     required super.images, super.colorImages = const {}, required super.variants,
     required super.soldOut, required super.isActive, required super.isFeatured,
@@ -44,6 +44,7 @@ class ProductModel extends Product {
     return ProductModel(
       id: j['_id'] as String,
       name: j['name'] as String? ?? '',
+      shopCode: j['shopCode'] as String?,
       slug: j['slug'] as String?,
       description: j['description'] as String?,
       price: (j['price'] as num?)?.toDouble() ?? 0,
@@ -67,6 +68,8 @@ class ProductModel extends Product {
 
   Map<String, dynamic> toJson() => {
     'name': name,
+    if (shopCode != null && shopCode!.trim().isNotEmpty)
+      'shopCode': shopCode!.trim().toUpperCase(),
     if (description != null) 'description': description,
     'price': price,
     if (compareAtPrice != null) 'compareAtPrice': compareAtPrice,

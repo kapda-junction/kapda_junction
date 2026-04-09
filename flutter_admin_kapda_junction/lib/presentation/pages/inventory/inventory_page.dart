@@ -17,6 +17,7 @@ class _InventoryPageState extends State<InventoryPage>
     with SingleTickerProviderStateMixin {
   late final TabController _tabs;
   final _api = sl<ApiClient>();
+  final _searchCtrl = TextEditingController();
   bool _loading = true;
   String? _error;
   List<_InventoryProduct> _all = [];
@@ -33,6 +34,7 @@ class _InventoryPageState extends State<InventoryPage>
 
   @override
   void dispose() {
+    _searchCtrl.dispose();
     _tabs.dispose();
     super.dispose();
   }
@@ -40,7 +42,11 @@ class _InventoryPageState extends State<InventoryPage>
   Future<void> _load() async {
     setState(() { _loading = true; _error = null; });
     try {
-      final res = await _api.get(ApiConstants.inventory);
+      final q = _searchCtrl.text.trim();
+      final res = await _api.get(
+        ApiConstants.inventory,
+        params: q.isEmpty ? null : {'search': q},
+      );
       final products = (res.data['products'] as List)
           .map((e) => _InventoryProduct.fromJson(e as Map<String, dynamic>))
           .toList();
@@ -75,7 +81,51 @@ class _InventoryPageState extends State<InventoryPage>
         actions: [
           IconButton(icon: const Icon(Icons.refresh), onPressed: _load),
         ],
-        bottom: TabBar(
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(104),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                child: TextField(
+                  controller: _searchCtrl,
+                  textInputAction: TextInputAction.search,
+                  decoration: InputDecoration(
+                    hintText: 'Search name, shop code, SKU…',
+                    prefixIcon: const Icon(Icons.search, size: 22),
+                    isDense: true,
+                    filled: true,
+                    fillColor: Theme.of(context).colorScheme.surfaceContainerHighest.withAlpha(80),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: Theme.of(context).colorScheme.outline.withAlpha(100)),
+                    ),
+                    suffixIcon: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (_searchCtrl.text.isNotEmpty)
+                          IconButton(
+                            icon: const Icon(Icons.clear, size: 20),
+                            onPressed: () {
+                              _searchCtrl.clear();
+                              _load();
+                            },
+                          ),
+                        IconButton(
+                          icon: const Icon(Icons.refresh, size: 20),
+                          tooltip: 'Search',
+                          onPressed: _load,
+                        ),
+                      ],
+                    ),
+                  ),
+                  onSubmitted: (_) => _load(),
+                  onChanged: (_) => setState(() {}),
+                ),
+              ),
+              TabBar(
           controller: _tabs,
           labelColor: AppColors.accent,
           indicatorColor: AppColors.accent,
@@ -96,6 +146,9 @@ class _InventoryPageState extends State<InventoryPage>
               ],
             ),
           )).toList(),
+              ),
+            ],
+          ),
         ),
       ),
       drawer: const AdminDrawer(),
@@ -207,6 +260,25 @@ class _ProductCardState extends State<_ProductCard> {
                         Text(p.name,
                           style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
                           maxLines: 1, overflow: TextOverflow.ellipsis),
+                        if (p.shopCode != null && p.shopCode!.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF0F172A).withAlpha(22),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              p.shopCode!,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0.5,
+                                color: Color(0xFF0F172A),
+                              ),
+                            ),
+                          ),
+                        ],
                         const SizedBox(height: 4),
                         Row(children: [
                           _StockBadge(label: 'Total: ${p.totalStock}', color: _stockColor(p.totalStock)),
@@ -393,6 +465,7 @@ class _NoImg extends StatelessWidget {
 class _InventoryProduct {
   final String id;
   final String name;
+  final String? shopCode;
   final String image;
   final int totalStock;
   final int outOfStockVariants;
@@ -402,6 +475,7 @@ class _InventoryProduct {
   const _InventoryProduct({
     required this.id,
     required this.name,
+    this.shopCode,
     required this.image,
     required this.totalStock,
     required this.outOfStockVariants,
@@ -412,6 +486,7 @@ class _InventoryProduct {
   factory _InventoryProduct.fromJson(Map<String, dynamic> j) => _InventoryProduct(
     id: j['_id'] as String,
     name: j['name'] as String? ?? '',
+    shopCode: j['shopCode'] as String?,
     image: ((j['images'] as List?)?.firstOrNull as String?) ?? '',
     totalStock: (j['totalStock'] as num?)?.toInt() ?? 0,
     outOfStockVariants: (j['outOfStockVariants'] as num?)?.toInt() ?? 0,

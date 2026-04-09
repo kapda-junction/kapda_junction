@@ -20,6 +20,7 @@ class ProductFormPage extends StatefulWidget {
 class _ProductFormPageState extends State<ProductFormPage> {
   final _formKey = GlobalKey<FormState>();
   final _nameCtrl = TextEditingController();
+  final _shopCodeCtrl = TextEditingController();
   final _descCtrl = TextEditingController();
   final _priceCtrl = TextEditingController();
   final _compareCtrl = TextEditingController();
@@ -78,6 +79,7 @@ class _ProductFormPageState extends State<ProductFormPage> {
       if (widget.productId != null) {
         final p = await sl<ProductDataSource>().getProduct(widget.productId!);
         _nameCtrl.text = p.name;
+        _shopCodeCtrl.text = p.shopCode ?? '';
         _descCtrl.text = p.description ?? '';
         _priceCtrl.text = p.price.toStringAsFixed(0);
         _compareCtrl.text = p.compareAtPrice?.toStringAsFixed(0) ?? '';
@@ -271,8 +273,10 @@ class _ProductFormPageState extends State<ProductFormPage> {
     // Effective category = subcategory if selected, else parent
     final effectiveCategoryId = _selectedSubcategoryId ?? _selectedCategoryId;
 
+    final shop = _shopCodeCtrl.text.trim();
     final data = <String, dynamic>{
       'name': _nameCtrl.text.trim(),
+      'shopCode': shop.isEmpty ? null : shop.toUpperCase(),
       'description': _descCtrl.text.trim(),
       'price': double.tryParse(_priceCtrl.text) ?? 0,
       if (_compareCtrl.text.isNotEmpty) 'compareAtPrice': double.tryParse(_compareCtrl.text),
@@ -308,6 +312,7 @@ class _ProductFormPageState extends State<ProductFormPage> {
   @override
   void dispose() {
     _nameCtrl.dispose();
+    _shopCodeCtrl.dispose();
     _descCtrl.dispose();
     _priceCtrl.dispose();
     _compareCtrl.dispose();
@@ -358,6 +363,26 @@ class _ProductFormPageState extends State<ProductFormPage> {
                     decoration: const InputDecoration(labelText: 'Name *'),
                     textCapitalization: TextCapitalization.words,
                     validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _shopCodeCtrl,
+                    textCapitalization: TextCapitalization.characters,
+                    decoration: const InputDecoration(
+                      labelText: 'Shop code (optional)',
+                      hintText: 'e.g. A1B2 — 4–5 letters/digits, unique',
+                      helperText: 'Search in Inventory by this code after offline sales',
+                    ),
+                    maxLength: 5,
+                    validator: (v) {
+                      final t = (v ?? '').trim();
+                      if (t.isEmpty) return null;
+                      if (t.length < 4) return 'Min 4 characters';
+                      if (!RegExp(r'^[A-Za-z0-9]+$').hasMatch(t)) {
+                        return 'Letters and digits only';
+                      }
+                      return null;
+                    },
                   ),
                   const SizedBox(height: 12),
                   TextFormField(

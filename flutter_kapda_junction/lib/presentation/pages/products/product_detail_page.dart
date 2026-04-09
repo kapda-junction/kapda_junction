@@ -605,8 +605,26 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
                                           fontWeight: FontWeight.w600,
                                         ),
                                       ),
+                                      if (count > 3) ...[
+                                        const SizedBox(height: 4),
+                                        Align(
+                                          alignment: Alignment.centerLeft,
+                                          child: TextButton(
+                                            onPressed: () => context.push(
+                                              '/product/${widget.productId}/reviews',
+                                            ),
+                                            child: Text(
+                                              'View all $count reviews',
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.w700,
+                                                color: cs.primary,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
                                       const SizedBox(height: 8),
-                                      ...raw.take(6).map((r) {
+                                      ...raw.take(3).map((r) {
                                         final m = r as Map<String, dynamic>;
                                         final title =
                                             (m['title'] ?? '').toString();

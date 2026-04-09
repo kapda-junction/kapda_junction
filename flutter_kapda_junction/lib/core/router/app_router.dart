@@ -10,6 +10,7 @@ import '../../presentation/pages/home/home_page.dart';
 import '../../presentation/pages/orders/order_detail_page.dart';
 import '../../presentation/pages/orders/orders_page.dart';
 import '../../presentation/pages/products/product_detail_page.dart';
+import '../../presentation/pages/products/product_reviews_page.dart';
 import '../../presentation/pages/products/products_page.dart';
 import '../../presentation/pages/profile/profile_page.dart';
 import '../../presentation/pages/profile/size_guide_page.dart';
@@ -43,6 +44,12 @@ GoRouter createRouter(AuthBloc authBloc) {
       GoRoute(path: '/splash',   builder: (c, s) => const SplashPage()),
       GoRoute(path: '/login',    builder: (c, s) => const LoginPage()),
       GoRoute(path: '/register', builder: (c, s) => const RegisterPage()),
+      GoRoute(
+        path: '/product/:id/reviews',
+        builder: (c, s) => ProductReviewsPage(
+          productId: s.pathParameters['id']!,
+        ),
+      ),
       GoRoute(
         path: '/product/:id',
         builder: (c, s) => ProductDetailPage(

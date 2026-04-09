@@ -1,4 +1,5 @@
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -86,6 +87,8 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
   bool? _returnsEnabled;
   bool? _returnVideoRequired;
   bool? _customerOrderCancelEnabled;
+  /// Product id → review moderation status for this order (from GET /reviews/mine).
+  Map<String, String> _reviewStatusByProductId = {};
 
   @override
   void initState() {
@@ -93,6 +96,18 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
     _bloc = sl<OrdersBloc>()..add(OrderDetailRequested(widget.orderId));
     _loadReturns();
     _loadPolicy();
+    _loadReviewedProductsForOrder();
+  }
+
+  Future<void> _loadReviewedProductsForOrder() async {
+    try {
+      final map = await sl<ReviewRemoteDataSource>()
+          .reviewStatusByProductForOrder(widget.orderId);
+      if (!mounted) return;
+      setState(() => _reviewStatusByProductId = map);
+    } catch (_) {
+      if (mounted) setState(() => _reviewStatusByProductId = {});
+    }
   }
 
   Future<void> _loadPolicy() async {
@@ -183,87 +198,81 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
     });
   }
 
+  Widget _reviewCtaForLineItem(
+    BuildContext context,
+    Order order,
+    OrderItem item,
+    TextTheme tt,
+    ColorScheme cs,
+  ) {
+    final st = _reviewStatusByProductId[item.productId];
+    if (st != null) {
+      final (String label, Color fg) = switch (st) {
+        'approved' => (
+            'Review published',
+            const Color(0xFF059669),
+          ),
+        'rejected' => (
+            'Review not published',
+            cs.onSurfaceVariant,
+          ),
+        _ => (
+            'Review submitted — pending approval',
+            cs.onSurfaceVariant,
+          ),
+      };
+      return Padding(
+        padding: const EdgeInsets.only(top: 4),
+        child: Text(
+          label,
+          style: tt.bodySmall?.copyWith(
+            color: fg,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      );
+    }
+    return TextButton.icon(
+      onPressed: () => _openReviewForItem(context, order, item),
+      icon: Icon(
+        Icons.rate_review_outlined,
+        size: 18,
+        color: cs.primary,
+      ),
+      label: Text(
+        'Rate & review',
+        style: TextStyle(color: cs.primary),
+      ),
+    );
+  }
+
   Future<void> _openReviewForItem(
     BuildContext context,
     Order order,
     OrderItem item,
   ) async {
-    final titleCtrl = TextEditingController();
-    final bodyCtrl = TextEditingController();
-    var rating = 5;
-    final ok = await showDialog<bool>(
+    final result = await showDialog<_ReviewDialogResult>(
       context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setSt) => AlertDialog(
-          title: const Text('Write a review'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(item.name,
-                    style: Theme.of(ctx).textTheme.titleSmall),
-                const SizedBox(height: 12),
-                Text('Rating: $rating / 5'),
-                Slider(
-                  value: rating.toDouble(),
-                  min: 1,
-                  max: 5,
-                  divisions: 4,
-                  label: '$rating',
-                  onChanged: (v) => setSt(() => rating = v.round()),
-                ),
-                TextField(
-                  controller: titleCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Title (optional)',
-                  ),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: bodyCtrl,
-                  maxLines: 3,
-                  decoration: const InputDecoration(
-                    labelText: 'Your experience (optional)',
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Reviews are checked before they appear on the product page.',
-                  style: Theme.of(ctx).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(ctx).colorScheme.onSurfaceVariant,
-                      ),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Submit'),
-            ),
-          ],
-        ),
-      ),
+      builder: (ctx) => _WriteReviewDialog(item: item),
     );
-    final titleText = titleCtrl.text;
-    final bodyText = bodyCtrl.text;
-    titleCtrl.dispose();
-    bodyCtrl.dispose();
-    if (ok != true || !context.mounted) return;
+    if (result == null || !mounted) return;
     try {
       await sl<ReviewRemoteDataSource>().createReview(
         orderId: order.id,
         productId: item.productId,
-        rating: rating,
-        title: titleText,
-        body: bodyText,
+        rating: result.rating,
+        title: result.title,
+        body: result.body,
       );
-      if (context.mounted) {
+      if (!mounted) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        setState(() {
+          _reviewStatusByProductId = {
+            ..._reviewStatusByProductId,
+            item.productId: 'pending',
+          };
+        });
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
@@ -271,13 +280,21 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
             ),
           ),
         );
-      }
+        _bloc.add(OrderDetailRequested(widget.orderId));
+      });
     } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$e')),
-        );
+      if (!mounted) return;
+      var msg = e.toString();
+      if (e is DioException) {
+        final data = e.response?.data;
+        if (data is Map && data['message'] != null) {
+          msg = data['message'].toString();
+        }
       }
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+      });
     }
   }
 
@@ -333,7 +350,10 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
         body: BlocConsumer<OrdersBloc, OrdersState>(
           listenWhen: (prev, cur) => cur is OrderDetailLoaded,
           listener: (context, state) {
-            if (state is OrderDetailLoaded) _loadReturns();
+            if (state is OrderDetailLoaded) {
+              _loadReturns();
+              _loadReviewedProductsForOrder();
+            }
           },
           builder: (context, state) {
             if (state is OrdersLoading) {
@@ -679,22 +699,12 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                                     order.isPaid)
                                   Align(
                                     alignment: Alignment.centerLeft,
-                                    child: TextButton.icon(
-                                      onPressed: () => _openReviewForItem(
-                                        context,
-                                        order,
-                                        item,
-                                      ),
-                                      icon: Icon(
-                                        Icons.rate_review_outlined,
-                                        size: 18,
-                                        color: cs.primary,
-                                      ),
-                                      label: Text(
-                                        'Rate & review',
-                                        style:
-                                            TextStyle(color: cs.primary),
-                                      ),
+                                    child: _reviewCtaForLineItem(
+                                      context,
+                                      order,
+                                      item,
+                                      tt,
+                                      cs,
                                     ),
                                   ),
                               ],
@@ -1160,6 +1170,103 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
           },
         ),
       ),
+    );
+  }
+}
+
+class _ReviewDialogResult {
+  final int rating;
+  final String title;
+  final String body;
+  const _ReviewDialogResult({
+    required this.rating,
+    required this.title,
+    required this.body,
+  });
+}
+
+class _WriteReviewDialog extends StatefulWidget {
+  final OrderItem item;
+  const _WriteReviewDialog({required this.item});
+
+  @override
+  State<_WriteReviewDialog> createState() => _WriteReviewDialogState();
+}
+
+class _WriteReviewDialogState extends State<_WriteReviewDialog> {
+  final _titleCtrl = TextEditingController();
+  final _bodyCtrl = TextEditingController();
+  double _rating = 5;
+
+  @override
+  void dispose() {
+    _titleCtrl.dispose();
+    _bodyCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tt = Theme.of(context).textTheme;
+    final cs = Theme.of(context).colorScheme;
+    final r = _rating.round();
+    return AlertDialog(
+      title: const Text('Write a review'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(widget.item.name, style: tt.titleSmall),
+            const SizedBox(height: 12),
+            Text('Rating: $r / 5'),
+            Slider(
+              value: _rating,
+              min: 1,
+              max: 5,
+              divisions: 4,
+              label: '$r',
+              onChanged: (v) => setState(() => _rating = v),
+            ),
+            TextField(
+              controller: _titleCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Title (optional)',
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _bodyCtrl,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                labelText: 'Your experience (optional)',
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Reviews are checked before they appear on the product page.',
+              style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(
+            context,
+            _ReviewDialogResult(
+              rating: r,
+              title: _titleCtrl.text,
+              body: _bodyCtrl.text,
+            ),
+          ),
+          child: const Text('Submit'),
+        ),
+      ],
     );
   }
 }

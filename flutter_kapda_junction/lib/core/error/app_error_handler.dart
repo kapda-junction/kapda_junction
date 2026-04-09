@@ -24,15 +24,21 @@ class AppErrorHandler {
   /// Show an error modal from anywhere in the app.
   static void show(String message, {String? title}) {
     if (_isShowing) return;
-    final ctx = _key?.currentContext;
-    if (ctx == null) return;
+    final key = _key;
+    if (key == null) return;
 
-    _isShowing = true;
-    showDialog<void>(
-      context: ctx,
-      barrierDismissible: true,
-      builder: (_) => _ErrorDialog(title: title ?? 'Error', message: message),
-    ).whenComplete(() => _isShowing = false);
+    // Avoid showing during route/dialog teardown (e.g. Dio errors right after pop).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_isShowing) return;
+      final ctx = key.currentContext;
+      if (ctx == null || !ctx.mounted) return;
+      _isShowing = true;
+      showDialog<void>(
+        context: ctx,
+        barrierDismissible: true,
+        builder: (_) => _ErrorDialog(title: title ?? 'Error', message: message),
+      ).whenComplete(() => _isShowing = false);
+    });
   }
 
   static String _extractMessage(DioException error) {

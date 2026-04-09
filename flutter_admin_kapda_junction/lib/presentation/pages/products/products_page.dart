@@ -60,22 +60,30 @@ class _ProductsViewState extends State<_ProductsView> {
   Future<void> _confirmDelete(BuildContext context, String id, String name) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Delete Product'),
         content: Text('Delete "$name"? This cannot be undone.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
           FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(dialogContext).colorScheme.error,
+            ),
             child: const Text('Delete'),
           ),
         ],
       ),
     );
-    if (confirmed == true && context.mounted) {
+    if (confirmed != true || !context.mounted) return;
+    // Avoid Navigator "locked" assert: run after dialog route is fully popped.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!context.mounted) return;
       context.read<ProductsBloc>().add(ProductDeleteRequested(id));
-    }
+    });
   }
 
   @override
