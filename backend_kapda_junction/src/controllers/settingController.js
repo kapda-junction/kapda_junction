@@ -1,5 +1,6 @@
 const Setting = require('../models/Setting');
 const storePolicy = require('../services/storePolicyService');
+const defaultSizeGuideHtml = require('../constants/defaultSizeGuideHtml');
 
 const WHATSAPP_KEY = 'whatsappInquiryNumber';
 const SIZE_GUIDE_KEY = 'sizeGuideHtml';
@@ -15,8 +16,9 @@ async function getOrCreateWhatsapp() {
 
 async function getSizeGuideHtml() {
   const doc = await Setting.findOne({ key: SIZE_GUIDE_KEY });
-  if (!doc || doc.value == null) return '';
-  return String(doc.value);
+  const raw = doc?.value != null ? String(doc.value) : '';
+  if (raw.trim() === '') return defaultSizeGuideHtml;
+  return raw;
 }
 
 exports.getPublic = async (req, res, next) => {
