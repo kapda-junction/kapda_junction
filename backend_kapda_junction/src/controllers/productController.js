@@ -76,6 +76,15 @@ const buildQuery = (query, isAdmin) => {
     q.variants = { $elemMatch: elem };
   }
 
+  if (isAdmin && query.search) {
+    const raw = String(query.search).trim();
+    if (raw) {
+      const rx = new RegExp(escapeRegex(raw), 'i');
+      const shopSkuOr = [{ shopCode: rx }, { 'variants.sku': rx }];
+      q.$or = q.$or ? [...q.$or, ...shopSkuOr] : shopSkuOr;
+    }
+  }
+
   return q;
 };
 
@@ -454,14 +463,25 @@ Answer the user: what fits their request from this catalog only?`
 };
 
 
-/** GET /api/products/inventory?filter=all|low|out
- *  Returns all products with variant stock details for admin inventory management
+/** GET /api/products/inventory?filter=all|low|out&search=
+ *  Returns products with variant stock. Sorted: fully out of stock first, then low stock, then name.
  */
 exports.getInventory = async (req, res, next) => {
   try {
-    const { filter = 'all' } = req.query;
-    const products = await Product.find({})
-      .select('name images variants soldOut isActive')
+    const { filter = 'all', search = '' } = req.query;
+    const searchTrim = String(search ?? '').trim();
+    const mongoFilter = {};
+    if (searchTrim) {
+      const rx = new RegExp(escapeRegex(searchTrim), 'i');
+      mongoFilter.$or = [
+        { name: rx },
+        { shopCode: rx },
+        { 'variants.sku': rx }
+      ];
+    }
+
+    const products = await Product.find(mongoFilter)
+      .select('name images variants soldOut isActive shopCode')
       .populate('category', 'name')
       .lean();
 
@@ -474,9 +494,21 @@ exports.getInventory = async (req, res, next) => {
       return { ...p, totalStock, outOfStockVariants: outOfStockVariants.length, lowStockVariants: lowStockVariants.length };
     });
 
+    const sortInventory = (a, b) => {
+      const aOut = a.totalStock === 0;
+      const bOut = b.totalStock === 0;
+      if (aOut !== bOut) return aOut ? -1 : 1;
+      const aLow = a.lowStockVariants > 0 && a.totalStock > 0;
+      const bLow = b.lowStockVariants > 0 && b.totalStock > 0;
+      if (aLow !== bLow) return aLow ? -1 : 1;
+      return String(a.name || '').localeCompare(String(b.name || ''), undefined, { sensitivity: 'base' });
+    };
+
+    enriched.sort(sortInventory);
+
     let result = enriched;
     if (filter === 'out') result = enriched.filter(p => p.totalStock === 0);
-    else if (filter === 'low') result = enriched.filter(p => p.totalStock > 0 && p.totalStock <= LOW_STOCK_THRESHOLD * p.variants.length);
+    else if (filter === 'low') result = enriched.filter(p => p.totalStock > 0 && p.lowStockVariants > 0);
 
     res.json({ products: result, total: result.length });
   } catch (err) {

@@ -9,6 +9,8 @@ const variantSchema = new mongoose.Schema({
 
 const productSchema = new mongoose.Schema({
   name: { type: String, required: true },
+  /** Short unique code (4–5 chars) for shop / POS lookup — optional until set */
+  shopCode: { type: String, unique: true, sparse: true, trim: true },
   slug: { type: String },
   description: { type: String },
   price: { type: Number, required: true },
@@ -42,6 +44,16 @@ function genSku(name, color, size) {
 }
 
 productSchema.pre('save', function (next) {
+  if (this.shopCode != null && String(this.shopCode).trim() !== '') {
+    const s = String(this.shopCode).trim().toUpperCase();
+    if (!/^[A-Z0-9]{4,5}$/.test(s)) {
+      return next(new Error('Shop code must be 4–5 letters or digits (A–Z, 0–9)'));
+    }
+    this.shopCode = s;
+  } else {
+    this.shopCode = undefined;
+  }
+
   if (!this.slug) this.slug = this.name.toLowerCase().replace(/\s+/g, '-').concat('-', Date.now());
   // Auto-generate SKU for variants that don't have one
   if (this.variants) {
