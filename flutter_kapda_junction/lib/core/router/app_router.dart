@@ -65,6 +65,8 @@ GoRouter createRouter(AuthBloc authBloc) {
         ),
       ),
       GoRoute(path: '/checkout', builder: (c, s) => const CheckoutPage()),
+      GoRoute(path: '/size-guide', builder: (c, s) => const SizeGuidePage()),
+      GoRoute(path: '/addresses', builder: (c, s) => const AddressesPage()),
       GoRoute(
         path: '/orders/:id',
         builder: (c, s) => OrderDetailPage(orderId: s.pathParameters['id']!),
@@ -80,8 +82,6 @@ GoRouter createRouter(AuthBloc authBloc) {
           GoRoute(path: '/orders',   builder: (c, s) => const OrdersPage()),
           GoRoute(path: '/returns',   builder: (c, s) => const ReturnsPage()),
           GoRoute(path: '/profile',  builder: (c, s) => const ProfilePage()),
-          GoRoute(path: '/size-guide', builder: (c, s) => const SizeGuidePage()),
-          GoRoute(path: '/addresses', builder: (c, s) => const AddressesPage()),
           GoRoute(
             path: '/products',
             builder: (c, s) => ProductsPage(

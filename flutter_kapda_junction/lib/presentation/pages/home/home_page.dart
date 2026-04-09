@@ -222,26 +222,50 @@ class _HomePageState extends State<HomePage> {
                         scrollDirection: Axis.horizontal,
                         padding: const EdgeInsets.symmetric(horizontal: 16),
                         child: Row(
-                          children: sections.map((section) {
-                            final isSelected =
-                                _activeCategoryId == section.category.id;
-                            return Padding(
+                          children: [
+                            Padding(
                               padding: const EdgeInsets.only(right: 10),
                               child: FilterChip(
-                                selected: isSelected,
-                                onSelected: (_) =>
-                                    _jumpToCategory(section.category.id),
+                                selected: _activeCategoryId == null,
+                                onSelected: (_) {
+                                  setState(() => _activeCategoryId = null);
+                                  _scrollController.animateTo(
+                                    0,
+                                    duration: const Duration(milliseconds: 450),
+                                    curve: Curves.easeInOutCubic,
+                                  );
+                                },
                                 avatar: Icon(
-                                  Icons.grid_view_rounded,
+                                  Icons.apps_rounded,
                                   size: 18,
-                                  color: isSelected
+                                  color: _activeCategoryId == null
                                       ? AppColors.primary
                                       : colorScheme.onSurfaceVariant,
                                 ),
-                                label: Text(section.category.name),
+                                label: const Text('All'),
                               ),
-                            );
-                          }).toList(),
+                            ),
+                            ...sections.map((section) {
+                              final isSelected =
+                                  _activeCategoryId == section.category.id;
+                              return Padding(
+                                padding: const EdgeInsets.only(right: 10),
+                                child: FilterChip(
+                                  selected: isSelected,
+                                  onSelected: (_) =>
+                                      _jumpToCategory(section.category.id),
+                                  avatar: Icon(
+                                    Icons.grid_view_rounded,
+                                    size: 18,
+                                    color: isSelected
+                                        ? AppColors.primary
+                                        : colorScheme.onSurfaceVariant,
+                                  ),
+                                  label: Text(section.category.name),
+                                ),
+                              );
+                            }),
+                          ],
                         ),
                       ),
                     if (spotlightProducts.isNotEmpty) ...[

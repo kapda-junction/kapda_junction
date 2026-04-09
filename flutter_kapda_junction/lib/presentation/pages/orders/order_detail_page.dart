@@ -9,6 +9,8 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../bloc/orders/orders_bloc.dart';
 import '../../../core/di/injection.dart';
+import '../../../core/error/app_error_handler.dart';
+import '../../../core/utils/app_notification.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/utils/price_formatter.dart';
 import '../../../data/datasources/remote/home_remote_datasource.dart';
@@ -70,6 +72,18 @@ bool _hasPendingOrderCancel(List<ReturnRequest>? list) {
     if (r.type == 'order_cancel' && r.status == 'requested') return true;
   }
   return false;
+}
+
+// Active = any return/exchange NOT in a terminal state
+const _terminalReturnStatuses = {
+  'rejected', 'cancelled', 'refunded', 'completed'
+};
+
+bool _hasActiveReturn(List<ReturnRequest>? list) {
+  if (list == null || list.isEmpty) return false;
+  return list.any(
+    (r) => r.type != 'order_cancel' && !_terminalReturnStatuses.contains(r.status),
+  );
 }
 
 class OrderDetailPage extends StatefulWidget {
@@ -182,9 +196,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
       _onCancelFlowCompleted(message: 'Order cancelled');
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$e')),
-      );
+      AppErrorHandler.show(e.toString());
     }
   }
 
@@ -194,7 +206,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
       if (!mounted) return;
       _bloc.add(OrderDetailRequested(widget.orderId));
       _loadReturns();
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+      AppNotification.showSuccess(context, message);
     });
   }
 
@@ -273,12 +285,9 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
             item.productId: 'pending',
           };
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Thanks! Your review will show after admin approval.',
-            ),
-          ),
+        AppNotification.showSuccess(
+          context,
+          'Thanks! Your review will show after admin approval.',
         );
         _bloc.add(OrderDetailRequested(widget.orderId));
       });
@@ -293,7 +302,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
       }
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+        AppErrorHandler.show(msg);
       });
     }
   }
@@ -311,9 +320,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
           Navigator.pop(ctx);
           await _loadReturns();
           if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Return request submitted')),
-            );
+            AppNotification.showSuccess(context, 'Return request submitted');
           }
         },
       ),
@@ -427,12 +434,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                                 onTap: () {
                                   Clipboard.setData(
                                       ClipboardData(text: order.id));
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                        content: Text('Order ID copied'),
-                                        duration: Duration(seconds: 1),
-                                        behavior: SnackBarBehavior.floating),
-                                  );
+                                  AppNotification.showInfo(context, 'Order ID copied');
                                 },
                                 child: Row(
                                   children: [
@@ -1025,27 +1027,16 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                                                     await sl<
                                                             ReturnRemoteDataSource>()
                                                         .cancelReturn(r.id);
+                                                    await _loadReturns();
                                                     if (context.mounted) {
-                                                      await _loadReturns();
-                                                      ScaffoldMessenger.of(
-                                                              context)
-                                                          .showSnackBar(
-                                                        const SnackBar(
-                                                          content: Text(
-                                                              'Request cancelled'),
-                                                        ),
+                                                      AppNotification.showSuccess(
+                                                        context,
+                                                        'Request cancelled',
                                                       );
                                                     }
                                                   } catch (e) {
                                                     if (context.mounted) {
-                                                      ScaffoldMessenger.of(
-                                                              context)
-                                                          .showSnackBar(
-                                                        SnackBar(
-                                                          content:
-                                                              Text('$e'),
-                                                        ),
-                                                      );
+                                                      AppErrorHandler.show(e.toString());
                                                     }
                                                   }
                                                 },
@@ -1066,15 +1057,16 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                                   ),
                                 ),
                               const SizedBox(height: 8),
-                              FilledButton.icon(
-                                onPressed: () =>
-                                    _openReturnSheet(context, order),
-                                icon: const Icon(
-                                    Icons.assignment_return_outlined,
-                                    size: 20),
-                                label:
-                                    const Text('Start return or exchange'),
-                              ),
+                              if (!_hasActiveReturn(_returns))
+                                FilledButton.icon(
+                                  onPressed: () =>
+                                      _openReturnSheet(context, order),
+                                  icon: const Icon(
+                                      Icons.assignment_return_outlined,
+                                      size: 20),
+                                  label:
+                                      const Text('Start return or exchange'),
+                                ),
                             ],
                           ),
                         ),
@@ -1364,8 +1356,7 @@ class _OrderCancelSheetState extends State<_OrderCancelSheet> {
     } catch (e) {
       if (mounted) {
         setState(() => _uploadingVideo = false);
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('$e')));
+        AppErrorHandler.show(e.toString(), title: 'Upload Failed');
       }
     }
   }
@@ -1373,21 +1364,17 @@ class _OrderCancelSheetState extends State<_OrderCancelSheet> {
   Future<void> _submit() async {
     final d = _detailCtrl.text.trim();
     if (d.length < 10) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Please explain why you want to cancel (at least 10 characters)',
-          ),
-        ),
+      AppErrorHandler.show(
+        'Please explain why you want to cancel (at least 10 characters)',
+        title: 'Description Required',
       );
       return;
     }
     if (widget.returnVideoRequired &&
         (_videoUrl == null || _videoUrl!.trim().isEmpty)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please upload a short proof video'),
-        ),
+      AppErrorHandler.show(
+        'Please upload a short proof video',
+        title: 'Video Required',
       );
       return;
     }
@@ -1400,10 +1387,7 @@ class _OrderCancelSheetState extends State<_OrderCancelSheet> {
       );
       widget.onSubmitted();
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('$e')));
-      }
+      if (mounted) AppErrorHandler.show(e.toString());
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -1577,8 +1561,7 @@ class _ReturnExchangeSheetState extends State<_ReturnExchangeSheet> {
     } catch (e) {
       if (mounted) {
         setState(() => _uploadingVideo = false);
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('$e')));
+        AppErrorHandler.show(e.toString(), title: 'Upload Failed');
       }
     }
   }
@@ -1596,36 +1579,22 @@ class _ReturnExchangeSheetState extends State<_ReturnExchangeSheet> {
       });
     }
     if (bodyItems.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Select quantities for at least one item')),
-      );
+      AppErrorHandler.show('Select quantities for at least one item', title: 'Select Items');
       return;
     }
     if (_detailCtrl.text.trim().length < 10) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please describe the issue in at least 10 characters'),
-        ),
-      );
+      AppErrorHandler.show('Please describe the issue in at least 10 characters', title: 'Description Required');
       return;
     }
     if (widget.returnVideoRequired &&
         (_videoUrl == null || _videoUrl!.trim().isEmpty)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please upload a short product video as proof'),
-        ),
-      );
+      AppErrorHandler.show('Please upload a short product video as proof', title: 'Video Required');
       return;
     }
     if (_type == 'exchange' &&
         _exSizeCtrl.text.trim().isEmpty &&
         _exColorCtrl.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Enter the size or colour you want in exchange'),
-        ),
-      );
+      AppErrorHandler.show('Enter the size or colour you want in exchange', title: 'Exchange Details Required');
       return;
     }
 
@@ -1647,9 +1616,7 @@ class _ReturnExchangeSheetState extends State<_ReturnExchangeSheet> {
       });
       await widget.onSubmitted();
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
-      }
+      if (mounted) AppErrorHandler.show(e.toString());
     } finally {
       if (mounted) setState(() => _saving = false);
     }

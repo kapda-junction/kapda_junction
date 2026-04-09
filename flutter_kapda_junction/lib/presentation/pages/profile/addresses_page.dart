@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/constants/api_constants.dart';
 import '../../../core/di/injection.dart';
+import '../../../core/error/app_error_handler.dart';
 import '../../../core/network/api_client.dart';
 
 class AddressesPage extends StatefulWidget {
@@ -36,9 +37,7 @@ class _AddressesPageState extends State<AddressesPage> {
       setState(() => _addresses = list);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to load addresses: $e')),
-      );
+      AppErrorHandler.show('Failed to load addresses. Please try again.');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -51,9 +50,7 @@ class _AddressesPageState extends State<AddressesPage> {
       await _loadAddresses();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to delete address: $e')),
-      );
+      AppErrorHandler.show('Failed to delete address. Please try again.');
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -66,9 +63,7 @@ class _AddressesPageState extends State<AddressesPage> {
       await _loadAddresses();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to set default address: $e')),
-      );
+      AppErrorHandler.show('Failed to update default address. Please try again.');
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -219,9 +214,7 @@ class _AddressesPageState extends State<AddressesPage> {
                                   await _loadAddresses();
                                 } catch (e) {
                                   if (!mounted) return;
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(content: Text('Failed to save address: $e')),
-                                  );
+                                  AppErrorHandler.show('Failed to save address. Please try again.');
                                 } finally {
                                   if (mounted) setState(() => _saving = false);
                                 }

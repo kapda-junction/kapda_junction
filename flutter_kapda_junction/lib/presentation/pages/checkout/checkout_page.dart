@@ -10,10 +10,11 @@ import '../../bloc/auth/auth_bloc.dart';
 import '../../bloc/cart/cart_bloc.dart';
 import '../../bloc/orders/orders_bloc.dart';
 import '../../../core/constants/api_constants.dart';
-import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_typography.dart';
 import '../../../core/di/injection.dart';
+import '../../../core/error/app_error_handler.dart';
 import '../../../core/network/api_client.dart';
+import '../../../core/utils/app_notification.dart';
 import '../../../core/utils/price_formatter.dart';
 import '../../../domain/repositories/order_repository.dart';
 
@@ -275,9 +276,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
                                 }
                               } catch (e) {
                                 if (!mounted) return;
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text('Failed to add address: $e')),
-                                );
+                                AppErrorHandler.show('Failed to add address: $e');
                                 if (ctx.mounted) setSheetState(() => saving = false);
                               }
                             },
@@ -438,12 +437,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
         _couponCartFingerprint = _cartFingerprint(cartState);
       });
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Coupon applied'),
-          backgroundColor: AppColors.success,
-        ),
-      );
+      AppNotification.showSuccess(context, 'Coupon applied');
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -457,9 +451,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
         final d = e.response!.data;
         if (d is Map && d['message'] != null) msg = d['message'].toString();
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(msg), backgroundColor: AppColors.error),
-      );
+      AppErrorHandler.show(msg, title: 'Coupon Error');
     }
   }
 
@@ -495,13 +487,9 @@ class _CheckoutPageState extends State<CheckoutPage> {
         rzOrderId.isEmpty ||
         signature.isEmpty) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Could not confirm payment with the server. Check My Orders or contact support.',
-          ),
-          backgroundColor: AppColors.error,
-        ),
+      AppErrorHandler.show(
+        'Could not confirm payment with the server. Check My Orders or contact support.',
+        title: 'Payment Error',
       );
       return;
     }
@@ -543,31 +531,20 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
     if (!mounted) return;
     result.fold(
-      (f) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(f.message), backgroundColor: AppColors.error),
-        );
-      },
+      (f) => AppErrorHandler.show(f.message, title: 'Payment Failed'),
       (_) {
         _pendingMongoOrderId = null;
         context.read<CartBloc>().add(CartCleared());
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Payment successful!'),
-            backgroundColor: AppColors.success,
-          ),
-        );
+        AppNotification.showSuccess(context, 'Payment successful!');
         context.go('/orders');
       },
     );
   }
 
   void _onPaymentError(PaymentFailureResponse response) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Payment failed: ${response.message}'),
-        backgroundColor: AppColors.error,
-      ),
+    AppErrorHandler.show(
+      'Payment failed: ${response.message}',
+      title: 'Payment Failed',
     );
   }
 
@@ -653,12 +630,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
                 _openRazorpay(state.paymentData);
               }
               if (state is OrdersFailure) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(state.message),
-                    backgroundColor: AppColors.error,
-                  ),
-                );
+                AppErrorHandler.show(state.message, title: 'Order Error');
               }
             },
             builder: (context, state) {

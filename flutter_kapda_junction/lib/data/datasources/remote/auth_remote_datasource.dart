@@ -7,20 +7,21 @@ class AuthRemoteDataSource {
   AuthRemoteDataSource(this._client);
 
   Future<Map<String, dynamic>> login(String email, String password) async {
-    final res = await _client.post(ApiConstants.login, data: {
-      'email': email,
-      'password': password,
-    });
+    final res = await _client.post(
+      ApiConstants.login,
+      data: {'email': email, 'password': password},
+      skipGlobalError: true, // auth bloc handles and shows popup
+    );
     return res.data as Map<String, dynamic>;
   }
 
   Future<Map<String, dynamic>> register(
       String name, String email, String password) async {
-    final res = await _client.post(ApiConstants.register, data: {
-      'name': name,
-      'email': email,
-      'password': password,
-    });
+    final res = await _client.post(
+      ApiConstants.register,
+      data: {'name': name, 'email': email, 'password': password},
+      skipGlobalError: true, // auth bloc handles and shows popup
+    );
     return res.data as Map<String, dynamic>;
   }
 

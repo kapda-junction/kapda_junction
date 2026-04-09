@@ -1,10 +1,138 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
+import 'package:video_player/video_player.dart';
 import '../../../core/di/injection.dart';
 import '../../../domain/entities/return_request.dart';
 import '../../bloc/returns/returns_bloc.dart';
 import '../../widgets/common/admin_drawer.dart';
+
+// ── Video player dialog ───────────────────────────────────────────────────────
+
+class _VideoPlayerDialog extends StatefulWidget {
+  final String url;
+  const _VideoPlayerDialog({required this.url});
+
+  @override
+  State<_VideoPlayerDialog> createState() => _VideoPlayerDialogState();
+}
+
+class _VideoPlayerDialogState extends State<_VideoPlayerDialog> {
+  late VideoPlayerController _ctrl;
+  bool _initialized = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = VideoPlayerController.networkUrl(Uri.parse(widget.url))
+      ..initialize().then((_) {
+        if (mounted) {
+          setState(() => _initialized = true);
+          _ctrl.play();
+        }
+      }).catchError((e) {
+        if (mounted) setState(() => _error = e.toString());
+      });
+    _ctrl.addListener(() {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Dialog(
+      insetPadding: const EdgeInsets.all(16),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Proof Video',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.close),
+                onPressed: () => Navigator.pop(context),
+              ),
+            ],
+          ),
+          const Divider(height: 1),
+          if (_error != null)
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                children: [
+                  Icon(Icons.error_outline, color: cs.error, size: 40),
+                  const SizedBox(height: 8),
+                  Text('Could not load video', style: TextStyle(color: cs.error)),
+                  const SizedBox(height: 4),
+                  SelectableText(_error!, style: Theme.of(context).textTheme.bodySmall),
+                ],
+              ),
+            )
+          else if (!_initialized)
+            const Padding(
+              padding: EdgeInsets.all(40),
+              child: CircularProgressIndicator(),
+            )
+          else ...[
+            AspectRatio(
+              aspectRatio: _ctrl.value.aspectRatio > 0 ? _ctrl.value.aspectRatio : 9 / 16,
+              child: VideoPlayer(_ctrl),
+            ),
+            // Progress bar
+            VideoProgressIndicator(
+              _ctrl,
+              allowScrubbing: true,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            ),
+            // Controls
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.replay_5),
+                  onPressed: () {
+                    final pos = _ctrl.value.position - const Duration(seconds: 5);
+                    _ctrl.seekTo(pos < Duration.zero ? Duration.zero : pos);
+                  },
+                ),
+                IconButton(
+                  iconSize: 36,
+                  icon: Icon(_ctrl.value.isPlaying ? Icons.pause_circle : Icons.play_circle),
+                  onPressed: () {
+                    _ctrl.value.isPlaying ? _ctrl.pause() : _ctrl.play();
+                  },
+                ),
+                IconButton(
+                  icon: const Icon(Icons.replay),
+                  tooltip: 'Restart',
+                  onPressed: () {
+                    _ctrl.seekTo(Duration.zero);
+                    _ctrl.play();
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+          ],
+        ],
+      ),
+    );
+  }
+}
 
 List<Widget> _adminReturnReadOnlySections(
   BuildContext ctx,
@@ -98,14 +226,19 @@ List<Widget> _adminReturnReadOnlySections(
     lines.add(SelectableText(r.reasonDetail, style: tt.bodySmall));
   }
   if (r.videoUrl.isNotEmpty) {
-    lines.add(const SizedBox(height: 6));
-    lines.add(Text('Proof video (stored URL)', style: tt.labelMedium));
-    lines.add(SelectableText(
-      r.videoUrl,
-      style: tt.bodySmall?.copyWith(color: cs.primary),
-    ));
+    lines.add(const SizedBox(height: 8));
+    lines.add(
+      FilledButton.tonalIcon(
+        onPressed: () => showDialog<void>(
+          context: ctx,
+          builder: (_) => _VideoPlayerDialog(url: r.videoUrl),
+        ),
+        icon: const Icon(Icons.play_circle_outline, size: 18),
+        label: const Text('Play proof video'),
+      ),
+    );
   } else {
-    lines.add(Text('No video URL on record', style: tt.bodySmall?.copyWith(color: cs.outline)));
+    lines.add(Text('No video on record', style: tt.bodySmall?.copyWith(color: cs.outline)));
   }
 
   lines.add(const SizedBox(height: 8));

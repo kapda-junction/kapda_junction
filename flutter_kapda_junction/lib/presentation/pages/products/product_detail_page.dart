@@ -12,8 +12,11 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../core/constants/api_constants.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/di/injection.dart';
+import '../../../core/error/app_error_handler.dart';
+import '../../../core/utils/app_notification.dart';
 import '../../../core/utils/price_formatter.dart';
 import '../../../data/datasources/remote/activity_datasource.dart';
+import '../../../data/datasources/remote/home_remote_datasource.dart';
 import '../../../data/datasources/remote/review_remote_datasource.dart';
 import '../../../domain/entities/product.dart';
 import '../../bloc/cart/cart_bloc.dart';
@@ -43,6 +46,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
   String? _selectedColor;
   String? _selectedSize;
   int _imgIndex = 0;
+  String? _whatsappNumber;
 
   @override
   void initState() {
@@ -56,6 +60,15 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
         p.id, p.name, p.images.isNotEmpty ? p.images.first : null,
       );
     }
+    _loadWhatsAppNumber();
+  }
+
+  Future<void> _loadWhatsAppNumber() async {
+    try {
+      final m = await sl<HomeRemoteDataSource>().getSettings();
+      final number = (m['whatsappInquiryNumber'] ?? '').toString();
+      if (mounted && number.isNotEmpty) setState(() => _whatsappNumber = number);
+    } catch (_) {}
   }
 
   @override
@@ -68,11 +81,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
   bool _addToCart(BuildContext context, Product product) {
     if (product.variants.isNotEmpty &&
         (_selectedColor == null || _selectedSize == null)) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Please select color and size'),
-        backgroundColor: AppColors.error,
-        behavior: SnackBarBehavior.floating,
-      ));
+      AppErrorHandler.show('Please select color and size', title: 'Select Options');
       return false;
     }
     context.read<CartBloc>().add(CartItemAdded(
@@ -80,12 +89,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
       color: _selectedColor,
       size: _selectedSize,
     ));
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-      content: Text('Added to cart ✓'),
-      backgroundColor: AppColors.success,
-      behavior: SnackBarBehavior.floating,
-      duration: Duration(seconds: 1),
-    ));
+    AppNotification.showSuccess(context, 'Added to cart');
     return true;
   }
 
@@ -96,7 +100,8 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
       '(${PriceFormatter.format(product.price)}). Is it available?\n\n'
       '🔗 $shareUrl',
     );
-    final uri = Uri.parse('https://wa.me/919770525851?text=$msg');
+    final number = (_whatsappNumber?.isNotEmpty == true) ? _whatsappNumber! : '919770525851';
+    final uri = Uri.parse('https://wa.me/$number?text=$msg');
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
@@ -803,9 +808,25 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
 
                             // ── Sizes ──────────────────────────────────────
                             if (sizes.isNotEmpty) ...[
-                              _SectionHeader(
-                                label: 'Size',
-                                value: _selectedSize,
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: _SectionHeader(
+                                      label: 'Size',
+                                      value: _selectedSize,
+                                    ),
+                                  ),
+                                  TextButton(
+                                    onPressed: () => context.push('/size-guide'),
+                                    style: TextButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                                      minimumSize: Size.zero,
+                                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                      visualDensity: VisualDensity.compact,
+                                    ),
+                                    child: const Text('Size guide →', style: TextStyle(fontSize: 12)),
+                                  ),
+                                ],
                               ),
                               const SizedBox(height: 12),
                               Wrap(

@@ -66,7 +66,36 @@ class _SizeGuidePageState extends State<SizeGuidePage> {
                               color: cs.onSurfaceVariant,
                             ),
                           )
-                        : Html(data: _html),
+                        : Html(
+                            data: _html,
+                            style: {
+                              'table': Style(
+                                border: Border.all(
+                                  color: Theme.of(context).colorScheme.outlineVariant,
+                                ),
+                              ),
+                              'td': Style(
+                                padding: HtmlPaddings.symmetric(
+                                  horizontal: 10,
+                                  vertical: 8,
+                                ),
+                                border: Border.all(
+                                  color: Theme.of(context).colorScheme.outlineVariant,
+                                ),
+                              ),
+                              'th': Style(
+                                padding: HtmlPaddings.symmetric(
+                                  horizontal: 10,
+                                  vertical: 8,
+                                ),
+                                border: Border.all(
+                                  color: Theme.of(context).colorScheme.outlineVariant,
+                                ),
+                                fontWeight: FontWeight.w700,
+                                backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+                              ),
+                            },
+                          ),
                   ),
                 ),
     );
