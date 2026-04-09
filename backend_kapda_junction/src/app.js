@@ -28,6 +28,9 @@ const shareController = require('./controllers/shareController');
 
 const app = express();
 
+// Trust proxy (required for Render.com / reverse proxies)
+app.set('trust proxy', 1);
+
 // Middleware
 app.use(helmet({
   crossOriginResourcePolicy: { policy: 'cross-origin' },
