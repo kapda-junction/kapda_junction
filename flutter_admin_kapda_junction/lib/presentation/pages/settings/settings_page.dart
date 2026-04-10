@@ -27,6 +27,7 @@ class _SettingsView extends StatefulWidget {
 
 class _SettingsViewState extends State<_SettingsView> {
   final _ctrl = TextEditingController();
+  final _appDownloadCtrl = TextEditingController();
   final _userIdCtrl = TextEditingController();
   final _titleCtrl = TextEditingController();
   final _bodyCtrl = TextEditingController();
@@ -43,6 +44,7 @@ class _SettingsViewState extends State<_SettingsView> {
   @override
   void dispose() {
     _ctrl.dispose();
+    _appDownloadCtrl.dispose();
     _userIdCtrl.dispose();
     _titleCtrl.dispose();
     _bodyCtrl.dispose();
@@ -115,6 +117,9 @@ class _SettingsViewState extends State<_SettingsView> {
             if (_ctrl.text.isEmpty) {
               _ctrl.text = state.whatsappNumber;
             }
+            if (_appDownloadCtrl.text.isEmpty) {
+              _appDownloadCtrl.text = state.appDownloadUrl;
+            }
             setState(() {
               _returnsEnabled = state.returnsEnabled;
               _returnVideoRequired = state.returnVideoRequired;
@@ -165,6 +170,52 @@ class _SettingsViewState extends State<_SettingsView> {
                             if (_ctrl.text.trim().isNotEmpty) {
                               context.read<SettingsBloc>().add(WhatsappNumberUpdateRequested(_ctrl.text.trim()));
                             }
+                          },
+                    child: state is SettingsSaving
+                        ? SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Theme.of(context).colorScheme.onPrimary,
+                            ),
+                          )
+                        : const Text('Save'),
+                  ),
+                ]),
+                const SizedBox(height: 28),
+                Text(
+                  'App download link (share page)',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Google Drive, Play Store, or APK link. Shown on product share pages when the visitor does not have the app.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                ),
+                const SizedBox(height: 12),
+                Row(children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _appDownloadCtrl,
+                      keyboardType: TextInputType.url,
+                      decoration: const InputDecoration(
+                        labelText: 'Download URL',
+                        prefixIcon: Icon(Icons.link),
+                        hintText: 'https://drive.google.com/...',
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  FilledButton(
+                    onPressed: state is SettingsSaving
+                        ? null
+                        : () {
+                            context.read<SettingsBloc>().add(
+                                  AppDownloadUrlSaveRequested(_appDownloadCtrl.text.trim()),
+                                );
                           },
                     child: state is SettingsSaving
                         ? SizedBox(

@@ -13,6 +13,12 @@ class WhatsappNumberUpdateRequested extends SettingsEvent {
   @override List<Object?> get props => [number];
 }
 
+class AppDownloadUrlSaveRequested extends SettingsEvent {
+  final String url;
+  const AppDownloadUrlSaveRequested(this.url);
+  @override List<Object?> get props => [url];
+}
+
 class StorePolicySaveRequested extends SettingsEvent {
   final bool returnsEnabled;
   final bool returnVideoRequired;

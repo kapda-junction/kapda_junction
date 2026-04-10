@@ -2,6 +2,15 @@ const Product = require('../models/Product');
 const Setting = require('../models/Setting');
 
 const BASE_URL = process.env.BASE_URL || `http://localhost:${process.env.PORT || 3000}`;
+const WHATSAPP_SETTING_KEY = 'whatsappInquiryNumber';
+
+/** Digits only for wa.me; 10-digit IN numbers get 91 prefix. */
+function waMePhoneFromSetting(raw) {
+  const d = String(raw || '').replace(/\D/g, '');
+  if (!d) return '919770525851';
+  if (d.length === 10) return `91${d}`;
+  return d;
+}
 
 function escapeHtml(str) {
   if (!str) return '';
@@ -17,11 +26,13 @@ exports.shareProduct = async (req, res, next) => {
   const reqId = req.params.id;
   console.log(`[share] GET /share/product/${reqId}`);
   try {
-    const [product, downloadSetting] = await Promise.all([
+    const [product, downloadSetting, whatsappSetting] = await Promise.all([
       Product.findById(reqId).populate('category', 'name').lean(),
-      Setting.findOne({ key: 'appDownloadUrl' }).lean()
+      Setting.findOne({ key: 'appDownloadUrl' }).lean(),
+      Setting.findOne({ key: WHATSAPP_SETTING_KEY }).lean()
     ]);
     const appDownloadUrl = downloadSetting?.value ? String(downloadSetting.value) : '';
+    const waPhone = waMePhoneFromSetting(whatsappSetting?.value);
 
     if (!product || !product.isActive) {
       console.log(`[share] product not found or inactive: ${reqId}`);
@@ -46,7 +57,7 @@ exports.shareProduct = async (req, res, next) => {
     const waMsg = encodeURIComponent(
       `Hi! I'm interested in buying *${product.name}* (${price}). Is it available?\n\n🔗 ${sharePageUrl}`
     );
-    const waUrl = `https://wa.me/919770525851?text=${waMsg}`;
+    const waUrl = `https://wa.me/${waPhone}?text=${waMsg}`;
 
     const html = `<!DOCTYPE html>
 <html lang="en">

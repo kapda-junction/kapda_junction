@@ -11,12 +11,14 @@ class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
   SettingsBloc(this._ds) : super(SettingsInitial()) {
     on<SettingsLoadRequested>(_onLoad);
     on<WhatsappNumberUpdateRequested>(_onUpdateWhatsapp);
+    on<AppDownloadUrlSaveRequested>(_onSaveAppDownloadUrl);
     on<StorePolicySaveRequested>(_onSavePolicy);
   }
 
   SettingsLoaded _mapToLoaded(Map<String, dynamic> m) {
     return SettingsLoaded(
       whatsappNumber: m['whatsappInquiryNumber']?.toString() ?? '',
+      appDownloadUrl: m['appDownloadUrl']?.toString() ?? '',
       returnsEnabled: m['returnsEnabled'] != false,
       returnVideoRequired: m['returnVideoRequired'] != false,
       customerOrderCancelEnabled: m['customerOrderCancelEnabled'] != false,
@@ -39,6 +41,18 @@ class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
     try {
       final m = await _ds.updateSettings({
         'whatsappInquiryNumber': e.number,
+      });
+      emit(_mapToLoaded(m));
+    } catch (err) {
+      emit(SettingsFailure(err.toString()));
+    }
+  }
+
+  Future<void> _onSaveAppDownloadUrl(AppDownloadUrlSaveRequested e, Emitter<SettingsState> emit) async {
+    emit(SettingsSaving());
+    try {
+      final m = await _ds.updateSettings({
+        'appDownloadUrl': e.url.trim(),
       });
       emit(_mapToLoaded(m));
     } catch (err) {

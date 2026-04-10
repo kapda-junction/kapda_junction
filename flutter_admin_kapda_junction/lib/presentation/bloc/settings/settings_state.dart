@@ -11,6 +11,7 @@ class SettingsSaving extends SettingsState {}
 
 class SettingsLoaded extends SettingsState {
   final String whatsappNumber;
+  final String appDownloadUrl;
   final bool returnsEnabled;
   final bool returnVideoRequired;
   final bool customerOrderCancelEnabled;
@@ -18,6 +19,7 @@ class SettingsLoaded extends SettingsState {
 
   const SettingsLoaded({
     required this.whatsappNumber,
+    required this.appDownloadUrl,
     required this.returnsEnabled,
     required this.returnVideoRequired,
     required this.customerOrderCancelEnabled,
@@ -27,6 +29,7 @@ class SettingsLoaded extends SettingsState {
   @override
   List<Object?> get props => [
         whatsappNumber,
+        appDownloadUrl,
         returnsEnabled,
         returnVideoRequired,
         customerOrderCancelEnabled,
