@@ -55,6 +55,13 @@ class WishlistBloc extends Bloc<WishlistEvent, WishlistState> {
     }
   }
 
-  void _onClear(WishlistCleared e, Emitter<WishlistState> emit) =>
-      emit(const WishlistState());
+  Future<void> _onClear(WishlistCleared e, Emitter<WishlistState> emit) async {
+    final previous = state.ids;
+    emit(const WishlistState());
+    try {
+      await _ds.clearAll();
+    } catch (_) {
+      emit(state.copyWith(ids: previous));
+    }
+  }
 }

@@ -56,11 +56,11 @@ class _WishlistPageState extends State<WishlistPage> {
                 onPressed: () async {
                   final confirmed = await showDialog<bool>(
                     context: context,
-                    builder: (_) => AlertDialog(
+                    builder: (dialogCtx) => AlertDialog(
                       title: const Text('Clear wishlist?'),
                       actions: [
-                        TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-                        FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Clear')),
+                        TextButton(onPressed: () => Navigator.pop(dialogCtx, false), child: const Text('Cancel')),
+                        FilledButton(onPressed: () => Navigator.pop(dialogCtx, true), child: const Text('Clear')),
                       ],
                     ),
                   );

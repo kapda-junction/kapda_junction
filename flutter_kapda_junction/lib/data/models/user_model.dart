@@ -12,9 +12,9 @@ class UserModel extends User {
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
     return UserModel(
-      id: json['_id'] as String,
-      name: json['name'] as String,
-      email: json['email'] as String,
+      id: (json['_id'] ?? json['id'])?.toString() ?? '',
+      name: json['name'] as String? ?? '',
+      email: json['email'] as String? ?? '',
       phone: json['phone'] as String?,
       role: json['role'] as String? ?? 'customer',
       createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ??

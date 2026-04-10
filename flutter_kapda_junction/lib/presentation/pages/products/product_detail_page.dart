@@ -957,6 +957,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
                   children: [
                     // Add to Cart
                     Expanded(
+                      flex: 3,
                       child: OutlinedButton.icon(
                         icon: const Icon(Icons.shopping_bag_outlined,
                             size: 18),
@@ -979,7 +980,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
                     const SizedBox(width: 12),
                     // Buy Now — gradient button
                     Expanded(
-                      flex: 2,
+                      flex: 4,
                       child: product.soldOut
                           ? _GradientButton(
                               label: 'Buy Now',

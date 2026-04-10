@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'core/di/injection.dart';
 import 'core/error/app_error_handler.dart';
+import 'core/utils/app_notification.dart';
 import 'core/router/app_router.dart';
 import 'core/services/fcm_service.dart';
 import 'core/theme/app_theme.dart';
@@ -46,6 +47,7 @@ class _KapdaJunctionAppState extends State<KapdaJunctionApp> {
     _wishlistBloc = sl<WishlistBloc>();
     _router = createRouter(_authBloc);
     AppErrorHandler.init(rootNavigatorKey);
+    AppNotification.init(rootNavigatorKey);
     FcmService.setRouteFromPushHandler((data) {
       if (_authBloc.state is! AuthAuthenticated) {
         _router.go('/login');

@@ -63,10 +63,10 @@ class _SplashPageState extends State<SplashPage> with TickerProviderStateMixin {
     final storage = sl<LocalStorage>();
     if (storage.notifPermissionShown) {
       _notifHandled = true;
-      // If they previously granted permission, silently re-register token
-      // (handles token refresh between sessions).
+      // Re-init FCM so onMessageOpenedApp + getInitialMessage are wired up on
+      // every launch (not just the first time the user grants permission).
       if (storage.notifPermissionGranted) {
-        FcmService.registerAnonymousToken();
+        FcmService.init();
       }
     } else {
       Future.delayed(const Duration(milliseconds: 1600), () {
@@ -90,7 +90,14 @@ class _SplashPageState extends State<SplashPage> with TickerProviderStateMixin {
 
   void _tryNavigate() {
     if (_minDelayDone && _authDone && _notifHandled && mounted) {
-      context.go('/');
+      final pushRoute = FcmService.consumeInitialRouteOverride();
+      if (pushRoute != null) {
+        final isAuth = context.read<AuthBloc>().state is AuthAuthenticated;
+        final needsAuth = pushRoute.startsWith('/orders') || pushRoute.startsWith('/returns');
+        context.go(needsAuth && !isAuth ? '/login' : pushRoute);
+      } else {
+        context.go('/');
+      }
     }
   }
 

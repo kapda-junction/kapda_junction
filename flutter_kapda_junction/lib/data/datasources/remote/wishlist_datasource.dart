@@ -26,4 +26,7 @@ class WishlistDataSource {
 
   Future<void> remove(String productId) =>
       _client.delete('${ApiConstants.wishlist}/$productId');
+
+  Future<void> clearAll() =>
+      _client.delete(ApiConstants.wishlist);
 }

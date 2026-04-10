@@ -1,14 +1,17 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 
-/// Top-slide notification banner. Use [AppNotification.showSuccess] for
-/// success feedback and [AppNotification.showInfo] for neutral info.
-/// For backend / validation errors use [AppErrorHandler.show] instead.
+/// Top-slide notification banner.
+/// Call [AppNotification.init] once at app start with the root navigator key.
 class AppNotification {
   AppNotification._();
 
+  static GlobalKey<NavigatorState>? _rootKey;
   static OverlayEntry? _active;
   static Timer? _timer;
+
+  /// Call once in main.dart / app init with the root navigator key.
+  static void init(GlobalKey<NavigatorState> key) => _rootKey = key;
 
   static void showSuccess(BuildContext context, String message) =>
       _show(context, message, _Type.success);
@@ -16,10 +19,14 @@ class AppNotification {
   static void showInfo(BuildContext context, String message) =>
       _show(context, message, _Type.info);
 
-  /// Rich push notification banner with a title and body line.
-  static void showPush(BuildContext context, String title, String body) {
+  /// Foreground push notification banner — no BuildContext needed.
+  /// Uses rootNavigatorKey overlay so it always works regardless of
+  /// which page is currently active.
+  static void showPush(String title, String body) {
     _dismiss();
-    final overlay = Overlay.of(context, rootOverlay: true);
+    final overlay = _rootKey?.currentState?.overlay;
+    debugPrint('[Notif] showPush called | rootKey=$_rootKey | overlay=$overlay');
+    if (overlay == null) return;
     final entry = OverlayEntry(
       builder: (_) => _Banner(message: body, type: _Type.push, title: title),
     );
@@ -62,14 +69,13 @@ class _Banner extends StatefulWidget {
 class _BannerState extends State<_Banner> with SingleTickerProviderStateMixin {
   late final AnimationController _ctrl;
   late final Animation<Offset> _slide;
+  double _dragX = 0;
 
   @override
   void initState() {
     super.initState();
     _ctrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 350),
-    );
+        vsync: this, duration: const Duration(milliseconds: 350));
     _slide = Tween<Offset>(begin: const Offset(0, -1.5), end: Offset.zero)
         .animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOutCubic));
     _ctrl.forward();
@@ -93,72 +99,92 @@ class _BannerState extends State<_Banner> with SingleTickerProviderStateMixin {
           child: SafeArea(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-              child: Material(
-                color: Colors.transparent,
-                child: Container(
-                  padding: const EdgeInsets.fromLTRB(14, 13, 14, 13),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF0F172A),
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withAlpha(80),
-                        blurRadius: 20,
-                        offset: const Offset(0, 6),
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Container(
-                        width: 38,
-                        height: 38,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onHorizontalDragUpdate: (d) =>
+                    setState(() => _dragX += d.delta.dx),
+                onHorizontalDragEnd: (d) {
+                  if (_dragX.abs() > 80) {
+                    AppNotification._dismiss();
+                  } else {
+                    setState(() => _dragX = 0);
+                  }
+                },
+                child: Transform.translate(
+                  offset: Offset(_dragX, 0),
+                  child: Opacity(
+                    opacity: (1.0 - (_dragX.abs() / 220)).clamp(0.2, 1.0),
+                    child: Material(
+                      color: Colors.transparent,
+                      child: Container(
+                        padding: const EdgeInsets.fromLTRB(14, 13, 14, 13),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFF59E0B).withAlpha(30),
-                          borderRadius: BorderRadius.circular(10),
+                          color: const Color(0xFF0F172A),
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withAlpha(80),
+                              blurRadius: 20,
+                              offset: const Offset(0, 6),
+                            ),
+                          ],
                         ),
-                        child: const Icon(
-                          Icons.notifications_rounded,
-                          color: Color(0xFFF59E0B),
-                          size: 20,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
-                            if (widget.title != null && widget.title!.isNotEmpty)
-                              Text(
-                                widget.title!,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 13,
-                                  height: 1.3,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
+                            Container(
+                              width: 38,
+                              height: 38,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF59E0B).withAlpha(30),
+                                borderRadius: BorderRadius.circular(10),
                               ),
-                            if (widget.title != null && widget.title!.isNotEmpty)
-                              const SizedBox(height: 2),
-                            Text(
-                              widget.message,
-                              style: TextStyle(
-                                color: Colors.white.withAlpha(200),
-                                fontWeight: FontWeight.w500,
-                                fontSize: 12,
-                                height: 1.4,
+                              child: const Icon(
+                                Icons.notifications_rounded,
+                                color: Color(0xFFF59E0B),
+                                size: 20,
                               ),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (widget.title != null &&
+                                      widget.title!.isNotEmpty)
+                                    Text(
+                                      widget.title!,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 13,
+                                        height: 1.3,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  if (widget.title != null &&
+                                      widget.title!.isNotEmpty)
+                                    const SizedBox(height: 2),
+                                  Text(
+                                    widget.message,
+                                    style: TextStyle(
+                                      color: Colors.white.withAlpha(200),
+                                      fontWeight: FontWeight.w500,
+                                      fontSize: 12,
+                                      height: 1.4,
+                                    ),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ),
                             ),
                           ],
                         ),
                       ),
-                    ],
+                    ),
                   ),
                 ),
               ),
@@ -168,10 +194,11 @@ class _BannerState extends State<_Banner> with SingleTickerProviderStateMixin {
       );
     }
 
+    // ── success / info banners ────────────────────────────────────────────────
     final (bg, icon) = switch (widget.type) {
       _Type.success => (const Color(0xFF059669), Icons.check_circle_rounded),
-      _Type.info => (const Color(0xFF0F172A), Icons.info_rounded),
-      _Type.push => (const Color(0xFF0F172A), Icons.notifications_rounded),
+      _Type.info    => (const Color(0xFF0F172A), Icons.info_rounded),
+      _Type.push    => (const Color(0xFF0F172A), Icons.notifications_rounded),
     };
 
     return Positioned(

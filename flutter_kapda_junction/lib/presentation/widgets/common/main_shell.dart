@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import '../../bloc/cart/cart_bloc.dart';
 import '../../bloc/wishlist/wishlist_bloc.dart';
-import '../../../core/services/fcm_service.dart';
-import '../../../core/utils/app_notification.dart';
 
 class MainShell extends StatefulWidget {
   final Widget child;
@@ -14,13 +13,54 @@ class MainShell extends StatefulWidget {
   State<MainShell> createState() => _MainShellState();
 }
 
-class _MainShellState extends State<MainShell> {
+class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
+  int _currentIndex = 0;
+
   @override
   void initState() {
     super.initState();
-    FcmService.setForegroundHandler((title, body) {
-      if (mounted) AppNotification.showPush(context, title, body);
-    });
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  Future<bool> didPopRoute() async {
+    if (!mounted) return false;
+
+    // Non-home tab → go to Home first.
+    if (_currentIndex != 0) {
+      context.go('/');
+      return true;
+    }
+
+    // Home tab → show exit confirmation dialog.
+    final exit = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Close App?'),
+        content: const Text('Are you sure you want to close the application?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+
+    if (!mounted) return true;
+    if (exit == true) SystemNavigator.pop();
+    return true;
   }
 
   int _locationIndex(String location) {
@@ -38,7 +78,7 @@ class _MainShellState extends State<MainShell> {
   @override
   Widget build(BuildContext context) {
     final location = GoRouterState.of(context).matchedLocation;
-    final currentIndex = _locationIndex(location);
+    _currentIndex = _locationIndex(location);
 
     return Scaffold(
       body: widget.child,
@@ -46,7 +86,7 @@ class _MainShellState extends State<MainShell> {
         builder: (context, cartState) {
           final cs = Theme.of(context).colorScheme;
           return NavigationBar(
-            selectedIndex: currentIndex,
+            selectedIndex: _currentIndex,
             backgroundColor: cs.surface,
             indicatorColor: cs.secondary.withAlpha(24),
             onDestinationSelected: (i) {

@@ -27,7 +27,6 @@ class AuthRemoteDataSource {
 
   Future<UserModel> getMe() async {
     final res = await _client.get(ApiConstants.me);
-    final data = res.data as Map<String, dynamic>;
-    return UserModel.fromJson(data['user'] as Map<String, dynamic>);
+    return UserModel.fromJson(res.data as Map<String, dynamic>);
   }
 }

@@ -4,18 +4,26 @@ import '../constants/api_constants.dart';
 import '../network/api_client.dart';
 import '../storage/local_storage.dart';
 import '../di/injection.dart';
+import '../utils/app_notification.dart';
 
 /// FCM service. Works only after Firebase.initializeApp() succeeds.
 /// All methods are silent no-ops if Firebase isn't configured.
 class FcmService {
   static bool _ready = false;
+  static bool _initialized = false; // guard against double-init
   static void Function(String productId)? _openProductHandler;
   static String? _pendingProductId;
 
   static void Function(Map<String, String> data)? _routeFromPush;
   static Map<String, String>? _pendingPushRoute;
 
-  static void Function(String title, String body)? _foregroundHandler;
+  /// Route to navigate to after splash, set when app is launched by tapping a notification.
+  static String? _initialRouteOverride;
+  static String? consumeInitialRouteOverride() {
+    final r = _initialRouteOverride;
+    _initialRouteOverride = null;
+    return r;
+  }
 
   static void markReady() => _ready = true;
 
@@ -26,11 +34,6 @@ class FcmService {
       _pendingProductId = null;
       handler(pending);
     }
-  }
-
-  /// Called by a widget with BuildContext to show an in-app banner for foreground messages.
-  static void setForegroundHandler(void Function(String title, String body) handler) {
-    _foregroundHandler = handler;
   }
 
   /// Order / returns notifications include `screen` + ids in data payload.
@@ -47,14 +50,22 @@ class FcmService {
   /// Requests OS permission, sets up listeners, and registers token anonymously.
   static Future<void> init() async {
     if (!_ready) return;
+    if (_initialized) return; // prevent duplicate listeners
+    _initialized = true;
     try {
       final m = FirebaseMessaging.instance;
       await m.requestPermission(alert: true, badge: true, sound: true);
       m.onTokenRefresh.listen(_uploadAnonymous);
       FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
+      debugPrint('[FCM] onMessage listener registered');
       FirebaseMessaging.onMessageOpenedApp.listen(_handleMessageOpen);
       final initial = await m.getInitialMessage();
-      if (initial != null) _handleMessageOpen(initial);
+      if (initial != null) {
+        // Store the target route — SplashPage will navigate there after auth check
+        // instead of going to '/'. This prevents SplashPage from overwriting the
+        // product/order route that would otherwise fire immediately here.
+        _initialRouteOverride = _buildRouteFromMessage(initial);
+      }
       // Register current token anonymously (user may not be logged in yet)
       await registerAnonymousToken();
     } catch (e) {
@@ -88,11 +99,30 @@ class FcmService {
 
   // ── Private helpers ────────────────────────────────────────────────────────
 
+  static String? _buildRouteFromMessage(RemoteMessage message) {
+    final data = <String, String>{};
+    for (final e in message.data.entries) {
+      data[e.key] = e.value?.toString() ?? '';
+    }
+    final screen = data['screen']?.trim() ?? '';
+    if (screen == 'order' && (data['orderId'] ?? '').isNotEmpty) {
+      return '/orders/${data['orderId']}';
+    }
+    if (screen == 'returns') return '/returns';
+    String? productId = data['productId']?.isNotEmpty == true ? data['productId'] : null;
+    productId ??= _extractProductIdFromUrl(data['shareUrl']);
+    if (productId != null && productId.isNotEmpty) {
+      return '/product/$productId?fromPush=1';
+    }
+    return null;
+  }
+
   static void _handleForegroundMessage(RemoteMessage message) {
+    debugPrint('[FCM] foreground message: ${message.notification?.title}');
     final title = message.notification?.title ?? '';
     final body = message.notification?.body ?? '';
     if (title.isEmpty && body.isEmpty) return;
-    _foregroundHandler?.call(title, body);
+    AppNotification.showPush(title, body);
   }
 
   static Future<void> _uploadAuthenticated(String token) async {

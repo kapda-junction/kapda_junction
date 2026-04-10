@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -631,7 +632,10 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                                       color: cs.outlineVariant.withAlpha(80),
                                       height: 20),
                                 ],
-                                Row(
+                                InkWell(
+                                  onTap: () => context.push('/product/${item.productId}'),
+                                  borderRadius: BorderRadius.circular(10),
+                                  child: Row(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     // Product image
@@ -696,6 +700,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                                           fontWeight: FontWeight.w800),
                                     ),
                                   ],
+                                  ),
                                 ),
                                 if (order.status == OrderStatus.delivered &&
                                     order.isPaid)

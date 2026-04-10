@@ -62,6 +62,7 @@ GoRouter createRouter(AuthBloc authBloc) {
         path: '/share/product/:id',
         builder: (c, s) => ProductDetailPage(
           productId: s.pathParameters['id']!,
+          openedFromPush: true,
         ),
       ),
       GoRoute(path: '/checkout', builder: (c, s) => const CheckoutPage()),

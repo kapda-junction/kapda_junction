@@ -22,6 +22,21 @@ import { ApiService } from '../../core/services/api.service';
         />
         <small>Enter 10-digit number without country code. For India, +91 will be added automatically.</small>
       </div>
+      <hr class="divider">
+
+      <h2>App Download Link</h2>
+      <p class="hint">Paste your Google Drive / Play Store link here. Users who don't have the app will see a "Download App" button on product share pages.</p>
+      <div class="form-group">
+        <label>Download URL</label>
+        <input
+          type="url"
+          [(ngModel)]="appDownloadUrl"
+          placeholder="https://drive.google.com/..."
+          class="input input-wide"
+          (keyup.enter)="save()"
+        />
+      </div>
+
       <div class="actions">
         <button (click)="save()" [disabled]="saving" class="btn-save">
           {{ saving ? 'Saving...' : 'Save' }}
@@ -53,6 +68,8 @@ import { ApiService } from '../../core/services/api.service';
       font-size: 1rem;
     }
     .form-group small { display: block; margin-top: 0.35rem; color: #888; font-size: 0.8rem; }
+    .input-wide { max-width: 100%; }
+    .divider { border: none; border-top: 1px solid #eee; margin: 1.75rem 0; }
     .actions { display: flex; align-items: center; gap: 1rem; }
     .btn-save {
       padding: 0.6rem 1.25rem;
@@ -73,14 +90,16 @@ export class SettingsComponent implements OnInit {
   private api = inject(ApiService);
 
   whatsappNumber = '';
+  appDownloadUrl = '';
   saving = false;
   message = '';
   isError = false;
 
   ngOnInit() {
-    this.api.get<{ whatsappInquiryNumber: string }>('/settings').subscribe({
+    this.api.get<{ whatsappInquiryNumber: string; appDownloadUrl?: string }>('/settings').subscribe({
       next: (res) => {
-        this.whatsappNumber = res?.whatsappInquiryNumber ?? '';
+        this.whatsappNumber  = res?.whatsappInquiryNumber ?? '';
+        this.appDownloadUrl  = res?.appDownloadUrl ?? '';
       },
     });
   }
@@ -100,9 +119,13 @@ export class SettingsComponent implements OnInit {
     }
     this.saving = true;
     this.message = '';
-    this.api.put<{ whatsappInquiryNumber: string }>('/settings', { whatsappInquiryNumber: digits }).subscribe({
+    this.api.put<{ whatsappInquiryNumber: string; appDownloadUrl: string }>(
+      '/settings',
+      { whatsappInquiryNumber: digits, appDownloadUrl: this.appDownloadUrl.trim() }
+    ).subscribe({
       next: (res) => {
         this.whatsappNumber = res?.whatsappInquiryNumber ?? trimmed;
+        this.appDownloadUrl = res?.appDownloadUrl ?? this.appDownloadUrl;
         this.saving = false;
         this.message = 'Saved successfully';
         this.isError = false;
