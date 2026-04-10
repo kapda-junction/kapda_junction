@@ -15,6 +15,8 @@ class FcmService {
   static void Function(Map<String, String> data)? _routeFromPush;
   static Map<String, String>? _pendingPushRoute;
 
+  static void Function(String title, String body)? _foregroundHandler;
+
   static void markReady() => _ready = true;
 
   static void setOpenProductHandler(void Function(String productId) handler) {
@@ -24,6 +26,11 @@ class FcmService {
       _pendingProductId = null;
       handler(pending);
     }
+  }
+
+  /// Called by a widget with BuildContext to show an in-app banner for foreground messages.
+  static void setForegroundHandler(void Function(String title, String body) handler) {
+    _foregroundHandler = handler;
   }
 
   /// Order / returns notifications include `screen` + ids in data payload.
@@ -44,6 +51,7 @@ class FcmService {
       final m = FirebaseMessaging.instance;
       await m.requestPermission(alert: true, badge: true, sound: true);
       m.onTokenRefresh.listen(_uploadAnonymous);
+      FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
       FirebaseMessaging.onMessageOpenedApp.listen(_handleMessageOpen);
       final initial = await m.getInitialMessage();
       if (initial != null) _handleMessageOpen(initial);
@@ -79,6 +87,13 @@ class FcmService {
   }
 
   // ── Private helpers ────────────────────────────────────────────────────────
+
+  static void _handleForegroundMessage(RemoteMessage message) {
+    final title = message.notification?.title ?? '';
+    final body = message.notification?.body ?? '';
+    if (title.isEmpty && body.isEmpty) return;
+    _foregroundHandler?.call(title, body);
+  }
 
   static Future<void> _uploadAuthenticated(String token) async {
     try {

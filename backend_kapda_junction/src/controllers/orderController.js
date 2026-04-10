@@ -13,6 +13,11 @@ const {
 } = require('../services/couponService');
 const { notifyOrderPush, notifyReturnsPush } = require('../services/customerPushService');
 
+/** Safely extracts the first product image URL from a populated order. */
+function firstProductImage(order) {
+  return order?.items?.[0]?.product?.images?.[0] || undefined;
+}
+
 const rzp = process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET
   ? new Razorpay({ key_id: process.env.RAZORPAY_KEY_ID, key_secret: process.env.RAZORPAY_KEY_SECRET })
   : null;
@@ -195,8 +200,9 @@ async function finalizeCapturedPayment(mongoOrderId, payment, opts = {}) {
     const userId = populated.user?._id || populated.user;
     if (userId) {
       const oid = populated._id;
+      const img = firstProductImage(populated);
       if (populated.paymentStatus === 'paid' && populated.status === 'confirmed') {
-        notifyOrderPush(userId, oid, 'Order confirmed', 'Payment received — we\'re preparing your order.')
+        notifyOrderPush(userId, oid, 'Order confirmed', 'Payment received — we\'re preparing your order.', img)
           .catch(() => {});
       } else if (populated.paymentStatus === 'refunded') {
         const stockIssue = (populated.cancelReason || '').toLowerCase().includes('stock');
@@ -206,7 +212,8 @@ async function finalizeCapturedPayment(mongoOrderId, payment, opts = {}) {
           'Refund processing',
           stockIssue
             ? 'We couldn\'t fulfil your order. Your refund is on the way.'
-            : 'Your payment has been refunded.'
+            : 'Your payment has been refunded.',
+          img
         ).catch(() => {});
       }
     }
@@ -279,24 +286,26 @@ exports.updateStatus = async (req, res, next) => {
     const uid = order.user;
     if (uid && status != null && order.status !== prevStatus) {
       const oid = order._id;
+      const img = firstProductImage(populated);
       if (order.status === 'confirmed') {
-        notifyOrderPush(uid, oid, 'Order confirmed', 'Your order is confirmed — we\'ll ship it soon.')
+        notifyOrderPush(uid, oid, 'Order confirmed', 'Your order is confirmed — we\'ll ship it soon.', img)
           .catch(() => {});
       } else if (order.status === 'shipped') {
         const awb = (order.shippingAwb || '').trim();
         const body = awb.length
           ? `On the way — tracking: ${awb}. Tap to open your order.`
           : 'Your order has shipped. Tap to track in the app.';
-        notifyOrderPush(uid, oid, 'Shipped', body).catch(() => {});
+        notifyOrderPush(uid, oid, 'Shipped', body, img).catch(() => {});
       } else if (order.status === 'delivered') {
-        notifyOrderPush(uid, oid, 'Delivered', 'Your order was delivered. We hope you love it!')
+        notifyOrderPush(uid, oid, 'Delivered', 'Your order was delivered. We hope you love it!', img)
           .catch(() => {});
       } else if (order.status === 'cancelled') {
         notifyOrderPush(
           uid,
           oid,
           'Order cancelled',
-          (order.cancelReason || 'Your order was cancelled.').slice(0, 200)
+          (order.cancelReason || 'Your order was cancelled.').slice(0, 200),
+          img
         ).catch(() => {});
       }
     }
@@ -311,7 +320,7 @@ exports.updateStatus = async (req, res, next) => {
 exports.retryRefund = async (req, res, next) => {
   try {
     if (!rzp) return res.status(503).json({ message: 'Payment service not configured' });
-    const order = await Order.findById(req.params.id);
+    const order = await Order.findById(req.params.id).populate('items.product', 'images');
     if (!order) return res.status(404).json({ message: 'Order not found' });
     if (order.paymentStatus !== 'paid' || !order.razorpayPaymentId) {
       return res.status(400).json({ message: 'Order is not in a refundable paid state' });
@@ -330,7 +339,8 @@ exports.retryRefund = async (req, res, next) => {
       order.user,
       order._id,
       'Refund retry',
-      'We\'ve re-initiated your refund. It may take a few days to show in your account.'
+      'We\'ve re-initiated your refund. It may take a few days to show in your account.',
+      firstProductImage(order)
     ).catch(() => {});
     res.json({
       message: 'Refund re-initiated',
@@ -537,7 +547,8 @@ exports.webhook = async (req, res) => {
           updated.user,
           updated._id,
           'Refund completed',
-          'Your refund has been processed. It can take 5–7 days to reach your bank or UPI.'
+          'Your refund has been processed. It can take 5–7 days to reach your bank or UPI.',
+          firstProductImage(updated)
         ).catch(() => {});
       }
     }
@@ -576,7 +587,7 @@ exports.cancelOrderCustomer = async (req, res, next) => {
         message: 'Cancelling orders from the app is disabled. Please contact support or WhatsApp us.'
       });
     }
-    const order = await Order.findById(req.params.id);
+    const order = await Order.findById(req.params.id).populate('items.product', 'images');
     if (!order) return res.status(404).json({ message: 'Order not found' });
     if (order.user.toString() !== req.user.id.toString()) {
       return res.status(403).json({ message: 'Not authorized' });
@@ -645,7 +656,8 @@ exports.cancelOrderCustomer = async (req, res, next) => {
       notifyReturnsPush(
         req.user.id,
         'Cancellation request sent',
-        'We will verify your details and process a refund only after approval.'
+        'We will verify your details and process a refund only after approval.',
+        firstProductImage(order)
       ).catch(() => {});
       return res.status(201).json({
         message:
@@ -665,7 +677,8 @@ exports.cancelOrderCustomer = async (req, res, next) => {
       order.user,
       order._id,
       'Order cancelled',
-      (order.cancelReason || 'Your order was cancelled.').slice(0, 200)
+      (order.cancelReason || 'Your order was cancelled.').slice(0, 200),
+      firstProductImage(order)
     ).catch(() => {});
     res.json(orderToClient(order));
   } catch (err) {
@@ -677,10 +690,11 @@ exports.cancelOrderCustomer = async (req, res, next) => {
 /** Admin: Cancel order. If paid, initiates refund via Razorpay. */
 exports.cancelOrder = async (req, res, next) => {
   try {
-    const order = await Order.findById(req.params.id);
+    const order = await Order.findById(req.params.id).populate('items.product', 'images');
     if (!order) return res.status(404).json({ message: 'Order not found' });
     if (order.status === 'cancelled') return res.status(400).json({ message: 'Order already cancelled' });
     const { reason } = req.body || {};
+    const img = firstProductImage(order);
 
     if (order.paymentStatus === 'paid' && order.razorpayPaymentId) {
       if (!rzp) return res.status(503).json({ message: 'Payment service not configured' });
@@ -700,7 +714,8 @@ exports.cancelOrder = async (req, res, next) => {
           order.user,
           order._id,
           'Refund started',
-          'Your order was cancelled and a refund has been started. Allow 5–7 working days.'
+          'Your order was cancelled and a refund has been started. Allow 5–7 working days.',
+          img
         ).catch(() => {});
         return res.json({
           message: 'Refund initiated. Customer will receive amount in 5-7 days.',
@@ -718,7 +733,8 @@ exports.cancelOrder = async (req, res, next) => {
           order.user,
           order._id,
           'Refund issue',
-          'Your order was cancelled but the refund needs manual help. Please contact support.'
+          'Your order was cancelled but the refund needs manual help. Please contact support.',
+          img
         ).catch(() => {});
         return res.status(400).json({
           message: order.refundLastError,
@@ -737,7 +753,8 @@ exports.cancelOrder = async (req, res, next) => {
       order.user,
       order._id,
       'Order cancelled',
-      (order.cancelReason || 'Your order was cancelled by the store.').slice(0, 200)
+      (order.cancelReason || 'Your order was cancelled by the store.').slice(0, 200),
+      img
     ).catch(() => {});
     res.json(orderToClient(order));
   } catch (err) {

@@ -3,10 +3,25 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import '../../bloc/cart/cart_bloc.dart';
 import '../../bloc/wishlist/wishlist_bloc.dart';
+import '../../../core/services/fcm_service.dart';
+import '../../../core/utils/app_notification.dart';
 
-class MainShell extends StatelessWidget {
+class MainShell extends StatefulWidget {
   final Widget child;
   const MainShell({super.key, required this.child});
+
+  @override
+  State<MainShell> createState() => _MainShellState();
+}
+
+class _MainShellState extends State<MainShell> {
+  @override
+  void initState() {
+    super.initState();
+    FcmService.setForegroundHandler((title, body) {
+      if (mounted) AppNotification.showPush(context, title, body);
+    });
+  }
 
   int _locationIndex(String location) {
     if (location.startsWith('/wishlist')) return 1;
@@ -26,7 +41,7 @@ class MainShell extends StatelessWidget {
     final currentIndex = _locationIndex(location);
 
     return Scaffold(
-      body: child,
+      body: widget.child,
       bottomNavigationBar: BlocBuilder<CartBloc, CartState>(
         builder: (context, cartState) {
           final cs = Theme.of(context).colorScheme;

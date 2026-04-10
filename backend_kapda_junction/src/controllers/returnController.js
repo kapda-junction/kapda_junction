@@ -2,7 +2,7 @@ const Razorpay = require('razorpay');
 const Order = require('../models/Order');
 const ReturnRequest = require('../models/ReturnRequest');
 const storePolicy = require('../services/storePolicyService');
-const { notifyReturnsPush, notifyOrderPush } = require('../services/customerPushService');
+const { notifyReturnsPush, notifyOrderPush, fetchOrderFirstImage } = require('../services/customerPushService');
 
 const rzp = process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET
   ? new Razorpay({ key_id: process.env.RAZORPAY_KEY_ID, key_secret: process.env.RAZORPAY_KEY_SECRET })
@@ -177,7 +177,7 @@ exports.create = async (req, res, next) => {
       return res.status(400).json({ message: 'exchangeFor must include desired size or color' });
     }
 
-    const order = await Order.findById(orderId);
+    const order = await Order.findById(orderId).populate('items.product', 'images');
     if (!order) return res.status(404).json({ message: 'Order not found' });
     if (order.user.toString() !== req.user.id) return res.status(403).json({ message: 'Not authorized' });
 
@@ -243,7 +243,8 @@ exports.create = async (req, res, next) => {
     notifyReturnsPush(
       req.user.id,
       type === 'exchange' ? 'Exchange requested' : 'Return requested',
-      'We\'ve received your request and will review it shortly.'
+      'We\'ve received your request and will review it shortly.',
+      order?.items?.[0]?.product?.images?.[0]
     ).catch(() => {});
     res.status(201).json(populated);
   } catch (err) {
@@ -272,8 +273,9 @@ exports.cancelMine = async (req, res, next) => {
  * Webhook refund.processed finalises paymentStatus / stock like other refunds.
  */
 async function fulfillOrderCancelAfterApproval(doc, adminUserId) {
-  const order = await Order.findById(doc.order);
+  const order = await Order.findById(doc.order).populate('items.product', 'images');
   if (!order) throw new Error('Order not found');
+  const img = order?.items?.[0]?.product?.images?.[0];
   if (order.status === 'cancelled') {
     doc.status = 'refunded';
     await doc.save();
@@ -292,7 +294,8 @@ async function fulfillOrderCancelAfterApproval(doc, adminUserId) {
       order.user,
       order._id,
       'Order cancelled',
-      'Your cancellation was approved.'
+      'Your cancellation was approved.',
+      img
     ).catch(() => {});
     return;
   }
@@ -315,7 +318,8 @@ async function fulfillOrderCancelAfterApproval(doc, adminUserId) {
     order.user,
     order._id,
     'Refund started',
-    'Your cancellation was approved. Refund is on the way — usually 5–7 working days.'
+    'Your cancellation was approved. Refund is on the way — usually 5–7 working days.',
+    img
   ).catch(() => {});
 }
 
@@ -371,7 +375,11 @@ exports.update = async (req, res, next) => {
             .populate('user', 'name email');
           res.json(populated);
           const copy = pushCopyForReturnStatus(doc.status, doc.type);
-          if (copy) notifyReturnsPush(doc.user, copy.title, copy.body).catch(() => {});
+          if (copy) {
+            fetchOrderFirstImage(doc.order).then((img) => {
+              notifyReturnsPush(doc.user, copy.title, copy.body, img).catch(() => {});
+            }).catch(() => {});
+          }
           return;
         }
       }
@@ -394,7 +402,9 @@ exports.update = async (req, res, next) => {
     if (doc.status !== prevStatus) {
       const copy = pushCopyForReturnStatus(doc.status, doc.type);
       if (copy) {
-        notifyReturnsPush(doc.user, copy.title, copy.body).catch(() => {});
+        fetchOrderFirstImage(doc.order).then((img) => {
+          notifyReturnsPush(doc.user, copy.title, copy.body, img).catch(() => {});
+        }).catch(() => {});
       }
     }
   } catch (err) {

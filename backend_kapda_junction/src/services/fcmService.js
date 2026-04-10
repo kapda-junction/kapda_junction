@@ -70,25 +70,30 @@ async function sendToTokens(tokens, payload) {
     return { sentCount: 0, failureCount: 0, invalidTokens: [] };
   }
 
+  const hasImage = !!(payload.imageUrl && String(payload.imageUrl).trim());
+  const imageUrl = hasImage ? String(payload.imageUrl).trim() : undefined;
+
   const messagePayload = {
     notification: {
       title: payload.title,
-      body: payload.body
+      body: payload.body,
+      ...(hasImage ? { imageUrl } : {})
     },
     data: toStringMap(payload.data),
-    android: { priority: 'high' },
+    android: {
+      priority: 'high',
+      ...(hasImage ? { notification: { imageUrl } } : {})
+    },
     apns: {
       payload: {
         aps: {
-          sound: 'default'
+          sound: 'default',
+          ...(hasImage ? { 'mutable-content': 1 } : {})
         }
-      }
+      },
+      ...(hasImage ? { fcmOptions: { image: imageUrl } } : {})
     }
   };
-
-  if (payload.imageUrl) {
-    messagePayload.notification.imageUrl = payload.imageUrl;
-  }
 
   let sentCount = 0;
   let failureCount = 0;
