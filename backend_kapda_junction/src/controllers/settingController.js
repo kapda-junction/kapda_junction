@@ -2,9 +2,10 @@ const Setting = require('../models/Setting');
 const storePolicy = require('../services/storePolicyService');
 const defaultSizeGuideHtml = require('../constants/defaultSizeGuideHtml');
 
-const WHATSAPP_KEY = 'whatsappInquiryNumber';
-const SIZE_GUIDE_KEY = 'sizeGuideHtml';
-const DEFAULT_WHATSAPP = '9770525851';
+const WHATSAPP_KEY      = 'whatsappInquiryNumber';
+const SIZE_GUIDE_KEY    = 'sizeGuideHtml';
+const APP_DOWNLOAD_KEY  = 'appDownloadUrl';
+const DEFAULT_WHATSAPP  = '9770525851';
 
 async function getOrCreateWhatsapp() {
   let doc = await Setting.findOne({ key: WHATSAPP_KEY });
@@ -21,16 +22,23 @@ async function getSizeGuideHtml() {
   return raw;
 }
 
+async function getAppDownloadUrl() {
+  const doc = await Setting.findOne({ key: APP_DOWNLOAD_KEY });
+  return doc?.value ? String(doc.value) : '';
+}
+
 exports.getPublic = async (req, res, next) => {
   try {
-    const [whatsappInquiryNumber, policy, sizeGuideHtml] = await Promise.all([
+    const [whatsappInquiryNumber, policy, sizeGuideHtml, appDownloadUrl] = await Promise.all([
       getOrCreateWhatsapp(),
       storePolicy.getPublicStorePolicy(),
-      getSizeGuideHtml()
+      getSizeGuideHtml(),
+      getAppDownloadUrl()
     ]);
     res.json({
       whatsappInquiryNumber,
       sizeGuideHtml,
+      appDownloadUrl,
       ...policy
     });
   } catch (err) {
@@ -44,6 +52,7 @@ exports.updateSettings = async (req, res, next) => {
     const {
       whatsappInquiryNumber,
       sizeGuideHtml,
+      appDownloadUrl,
       returnsEnabled,
       returnVideoRequired,
       customerOrderCancelEnabled
@@ -76,6 +85,15 @@ exports.updateSettings = async (req, res, next) => {
       );
     }
 
+    if (appDownloadUrl !== undefined) {
+      const url = typeof appDownloadUrl === 'string' ? appDownloadUrl.trim() : '';
+      await Setting.findOneAndUpdate(
+        { key: APP_DOWNLOAD_KEY },
+        { value: url },
+        { upsert: true, new: true }
+      );
+    }
+
     await storePolicy.setStorePolicy({
       returnsEnabled,
       returnVideoRequired,
@@ -85,7 +103,8 @@ exports.updateSettings = async (req, res, next) => {
     const value = await getOrCreateWhatsapp();
     const policy = await storePolicy.getPublicStorePolicy();
     const sg = await getSizeGuideHtml();
-    res.json({ whatsappInquiryNumber: value, sizeGuideHtml: sg, ...policy });
+    const dlUrl = await getAppDownloadUrl();
+    res.json({ whatsappInquiryNumber: value, sizeGuideHtml: sg, appDownloadUrl: dlUrl, ...policy });
   } catch (err) {
     next(err);
   }
