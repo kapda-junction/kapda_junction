@@ -53,3 +53,16 @@ exports.removeFromWishlist = async (req, res, next) => {
     next(err);
   }
 };
+
+exports.clearWishlist = async (req, res, next) => {
+  try {
+    await Wishlist.findOneAndUpdate(
+      { user: req.user.id },
+      { $set: { products: [] } },
+      { upsert: true }
+    );
+    res.json({ cleared: true });
+  } catch (err) {
+    next(err);
+  }
+};
